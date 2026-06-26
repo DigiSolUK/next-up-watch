@@ -1,5 +1,6 @@
 export type RatingValue = "loved" | "liked" | "ok" | "hated" | "not_seen";
 export type WatchStatus = "want_to_watch" | "watching" | "watched" | "removed";
+export type AvailabilityType = "subscription" | "rent" | "buy" | "free" | "unavailable";
 
 export interface MediaTitle {
   id: string;
@@ -40,6 +41,14 @@ export interface UserRating {
   created_at: string;
 }
 
+export interface StreamingProvider {
+  provider_name: string;
+  provider_logo_url: string | null;
+  availability_type: AvailabilityType;
+  region: string;
+  watch_url: string | null;
+}
+
 export interface WatchlistItem {
   id: string;
   user_id: string;
@@ -47,6 +56,7 @@ export interface WatchlistItem {
   status: WatchStatus;
   added_at: string;
   watched_at: string | null;
+  removed_at: string | null;
 }
 
 export interface UserSettings {

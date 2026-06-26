@@ -1,8 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./use-auth";
-import type { MediaTitle, RatingValue, UserRating, UserSettings, WatchStatus, WatchlistItem, TasteProfile } from "@/lib/types";
+import type { MediaTitle, RatingValue, StreamingProvider, UserRating, UserSettings, WatchStatus, WatchlistItem, TasteProfile } from "@/lib/types";
 import { buildTasteProfile, summariseProfile } from "@/lib/recommend";
+
+async function ensureUserBootstrap(userId: string) {
+  const { error } = await supabase.rpc("ensure_user_bootstrap", { target_user_id: userId });
+  if (error) throw error;
+}
 
 export function useMediaTitles() {
   return useQuery({
@@ -15,27 +20,34 @@ export function useMediaTitles() {
   });
 }
 
-export function useStreamingForTitles(titleIds: string[]) {
+export function useStreamingForTitles(titleIds: string[], region = "GB", providerNames: string[] = []) {
+  const sortedTitleIds = [...titleIds].sort();
+  const sortedProviders = [...providerNames].sort();
   return useQuery({
-    queryKey: ["streaming", titleIds.sort().join(",")],
+    queryKey: ["streaming", sortedTitleIds.join(","), region, sortedProviders.join(",")],
     queryFn: async () => {
-      if (!titleIds.length) return {} as Record<string, { provider_name: string; availability_type: string; watch_url: string | null }[]>;
-      const { data, error } = await supabase
+      if (!sortedTitleIds.length) return {} as Record<string, StreamingProvider[]>;
+      let query = supabase
         .from("streaming_availability")
         .select("*")
-        .in("media_title_id", titleIds);
+        .in("media_title_id", sortedTitleIds)
+        .eq("region", region);
+      if (sortedProviders.length) query = query.in("provider_name", sortedProviders);
+      const { data, error } = await query;
       if (error) throw error;
-      const out: Record<string, { provider_name: string; availability_type: string; watch_url: string | null }[]> = {};
+      const out: Record<string, StreamingProvider[]> = {};
       for (const row of data ?? []) {
         (out[row.media_title_id] ??= []).push({
           provider_name: row.provider_name,
-          availability_type: row.availability_type,
+          provider_logo_url: row.provider_logo_url,
+          availability_type: row.availability_type as StreamingProvider["availability_type"],
+          region: row.region,
           watch_url: row.watch_url,
         });
       }
       return out;
     },
-    enabled: titleIds.length > 0,
+    enabled: sortedTitleIds.length > 0,
   });
 }
 
@@ -63,8 +75,16 @@ export function useUserSettings() {
     queryKey: ["user_settings", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data, error } = await supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle();
+      const result = await supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle();
+      let data = result.data;
+      const error = result.error;
       if (error) throw error;
+      if (!data) {
+        await ensureUserBootstrap(user.id);
+        const repaired = await supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle();
+        if (repaired.error) throw repaired.error;
+        data = repaired.data;
+      }
       return data as unknown as UserSettings | null;
     },
     enabled: !!user,
@@ -96,8 +116,16 @@ export function useUserProfile() {
     queryKey: ["user_profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data, error } = await supabase.from("user_profiles").select("*").eq("user_id", user.id).maybeSingle();
+      const result = await supabase.from("user_profiles").select("*").eq("user_id", user.id).maybeSingle();
+      let data = result.data;
+      const error = result.error;
       if (error) throw error;
+      if (!data) {
+        await ensureUserBootstrap(user.id);
+        const repaired = await supabase.from("user_profiles").select("*").eq("user_id", user.id).maybeSingle();
+        if (repaired.error) throw repaired.error;
+        data = repaired.data;
+      }
       return data;
     },
     enabled: !!user,
@@ -157,6 +185,7 @@ export function useRateTitle() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["user_ratings"] });
       qc.invalidateQueries({ queryKey: ["user_profile"] });
+      qc.invalidateQueries({ queryKey: ["watchlist"] });
     },
   });
 }
@@ -168,7 +197,10 @@ export function useAddToWatchlist() {
     mutationFn: async (mediaTitleId: string) => {
       if (!user) throw new Error("Not signed in");
       const { error } = await supabase.from("watchlist").upsert({
-        user_id: user.id, media_title_id: mediaTitleId, status: "want_to_watch",
+        user_id: user.id,
+        media_title_id: mediaTitleId,
+        status: "want_to_watch",
+        removed_at: null,
       }, { onConflict: "user_id,media_title_id" });
       if (error) throw error;
       await supabase.from("recommendation_events").insert({
@@ -185,8 +217,12 @@ export function useUpdateWatchlistStatus() {
   return useMutation({
     mutationFn: async ({ mediaTitleId, status }: { mediaTitleId: string; status: WatchStatus }) => {
       if (!user) throw new Error("Not signed in");
-      const patch: { status: WatchStatus; watched_at?: string; removed_at?: string } = { status };
-      if (status === "watched") patch.watched_at = new Date().toISOString();
+      const patch: { status: WatchStatus; watched_at?: string | null; removed_at?: string | null } = { status };
+      if (status === "want_to_watch" || status === "watching") patch.removed_at = null;
+      if (status === "watched") {
+        patch.watched_at = new Date().toISOString();
+        patch.removed_at = null;
+      }
       if (status === "removed") patch.removed_at = new Date().toISOString();
       const { error } = await supabase.from("watchlist").update(patch).eq("user_id", user.id).eq("media_title_id", mediaTitleId);
       if (error) throw error;
@@ -216,9 +252,15 @@ export function useUpdateSettings() {
   return useMutation({
     mutationFn: async (patch: Partial<UserSettings>) => {
       if (!user) throw new Error("Not signed in");
-      const { error } = await supabase.from("user_settings").update(patch).eq("user_id", user.id);
+      const { error } = await supabase.from("user_settings").upsert({
+        user_id: user.id,
+        ...patch,
+      }, { onConflict: "user_id" });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["user_settings"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["user_settings"] });
+      qc.invalidateQueries({ queryKey: ["streaming"] });
+    },
   });
 }

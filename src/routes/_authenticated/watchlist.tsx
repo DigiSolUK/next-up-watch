@@ -12,7 +12,7 @@ export const Route = createFileRoute("/_authenticated/watchlist")({
 });
 
 function WatchlistPage() {
-  const { data: titles } = useMediaTitles();
+  const { data: titles, isLoading: titlesLoading } = useMediaTitles();
   const { data: items, isLoading } = useWatchlist();
   const update = useUpdateWatchlistStatus();
   const rate = useRateTitle();
@@ -21,7 +21,9 @@ function WatchlistPage() {
   const streaming = useStreamingForTitles(ids);
   const [askRating, setAskRating] = useState<string | null>(null);
 
-  if (isLoading) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  const busy = update.isPending || rate.isPending;
+
+  if (isLoading || titlesLoading) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
 
   if (!items || items.length === 0) {
     return (
@@ -33,15 +35,23 @@ function WatchlistPage() {
   }
 
   const setStatus = async (mediaTitleId: string, status: WatchStatus) => {
-    await update.mutateAsync({ mediaTitleId, status });
-    if (status === "watched") setAskRating(mediaTitleId);
-    else toast.success("Updated.");
+    try {
+      await update.mutateAsync({ mediaTitleId, status });
+      if (status === "watched") setAskRating(mediaTitleId);
+      else toast.success("Updated.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   const ratePost = async (mediaTitleId: string, r: RatingValue) => {
-    await rate.mutateAsync({ mediaTitleId, rating: r, mode: "watchlist_followup" });
-    setAskRating(null);
-    toast.success("Thanks — that'll improve future picks.");
+    try {
+      await rate.mutateAsync({ mediaTitleId, rating: r, mode: "watchlist_followup" });
+      setAskRating(null);
+      toast.success("Thanks - that'll improve future picks.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   return (
@@ -76,22 +86,22 @@ function WatchlistPage() {
                   <div className="mt-2"><StreamingProviders providers={providers} /></div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {item.status !== "watching" && (
-                      <button onClick={() => setStatus(t.id, "watching")} className="rounded-md bg-secondary px-2.5 py-1.5 text-xs font-medium hover:bg-secondary/80"><Eye className="mr-1 inline h-3 w-3" />Watching</button>
+                      <button disabled={busy} onClick={() => setStatus(t.id, "watching")} className="rounded-md bg-secondary px-2.5 py-1.5 text-xs font-medium hover:bg-secondary/80 disabled:opacity-60"><Eye className="mr-1 inline h-3 w-3" />Watching</button>
                     )}
                     {item.status !== "watched" && (
-                      <button onClick={() => setStatus(t.id, "watched")} className="rounded-md bg-[color:var(--liked)] px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90"><Check className="mr-1 inline h-3 w-3" />Watched</button>
+                      <button disabled={busy} onClick={() => setStatus(t.id, "watched")} className="rounded-md bg-[color:var(--liked)] px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-60"><Check className="mr-1 inline h-3 w-3" />Watched</button>
                     )}
-                    <button onClick={() => setStatus(t.id, "removed")} className="rounded-md bg-muted px-2.5 py-1.5 text-xs font-medium hover:bg-muted/70"><Trash2 className="mr-1 inline h-3 w-3" />Remove</button>
+                    <button disabled={busy} onClick={() => setStatus(t.id, "removed")} className="rounded-md bg-muted px-2.5 py-1.5 text-xs font-medium hover:bg-muted/70 disabled:opacity-60"><Trash2 className="mr-1 inline h-3 w-3" />Remove</button>
                   </div>
 
                   {askRating === t.id && (
                     <div className="mt-3 rounded-lg border border-primary/30 bg-primary/10 p-3">
                       <p className="text-xs font-semibold">How was it?</p>
                       <div className="mt-2 grid grid-cols-4 gap-1.5">
-                        <button onClick={() => ratePost(t.id, "loved")} className="flex flex-col items-center rounded-md bg-[color:var(--loved)] p-1.5 text-[10px] font-semibold text-white"><Heart className="h-4 w-4" />Loved</button>
-                        <button onClick={() => ratePost(t.id, "liked")} className="flex flex-col items-center rounded-md bg-[color:var(--liked)] p-1.5 text-[10px] font-semibold text-white"><ThumbsUp className="h-4 w-4" />Liked</button>
-                        <button onClick={() => ratePost(t.id, "ok")} className="flex flex-col items-center rounded-md bg-[color:var(--ok)] p-1.5 text-[10px] font-semibold text-white"><Meh className="h-4 w-4" />OK</button>
-                        <button onClick={() => ratePost(t.id, "hated")} className="flex flex-col items-center rounded-md bg-[color:var(--hated)] p-1.5 text-[10px] font-semibold text-white"><ThumbsDown className="h-4 w-4" />Hated</button>
+                        <button disabled={busy} onClick={() => ratePost(t.id, "loved")} className="flex flex-col items-center rounded-md bg-[color:var(--loved)] p-1.5 text-[10px] font-semibold text-white disabled:opacity-60"><Heart className="h-4 w-4" />Loved</button>
+                        <button disabled={busy} onClick={() => ratePost(t.id, "liked")} className="flex flex-col items-center rounded-md bg-[color:var(--liked)] p-1.5 text-[10px] font-semibold text-white disabled:opacity-60"><ThumbsUp className="h-4 w-4" />Liked</button>
+                        <button disabled={busy} onClick={() => ratePost(t.id, "ok")} className="flex flex-col items-center rounded-md bg-[color:var(--ok)] p-1.5 text-[10px] font-semibold text-white disabled:opacity-60"><Meh className="h-4 w-4" />OK</button>
+                        <button disabled={busy} onClick={() => ratePost(t.id, "hated")} className="flex flex-col items-center rounded-md bg-[color:var(--hated)] p-1.5 text-[10px] font-semibold text-white disabled:opacity-60"><ThumbsDown className="h-4 w-4" />Hated</button>
                       </div>
                     </div>
                   )}
@@ -104,3 +114,4 @@ function WatchlistPage() {
     </div>
   );
 }
+
