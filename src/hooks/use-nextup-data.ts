@@ -119,7 +119,8 @@ async function recomputeAndSaveProfile(userId: string, threshold: number) {
   const summary = summariseProfile(tp, ratedCount);
   await supabase.from("user_profiles").upsert({
     user_id: userId,
-    data: tp as unknown as Record<string, unknown>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: tp as any,
     ratings_count: ratedCount,
     recommendation_ready: ready,
     recommendation_readiness_score: confidence,
@@ -127,6 +128,7 @@ async function recomputeAndSaveProfile(userId: string, threshold: number) {
     profile_summary: summary,
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id" });
+
 }
 
 export function useRateTitle() {
@@ -183,11 +185,12 @@ export function useUpdateWatchlistStatus() {
   return useMutation({
     mutationFn: async ({ mediaTitleId, status }: { mediaTitleId: string; status: WatchStatus }) => {
       if (!user) throw new Error("Not signed in");
-      const patch: Record<string, unknown> = { status };
+      const patch: { status: WatchStatus; watched_at?: string; removed_at?: string } = { status };
       if (status === "watched") patch.watched_at = new Date().toISOString();
       if (status === "removed") patch.removed_at = new Date().toISOString();
       const { error } = await supabase.from("watchlist").update(patch).eq("user_id", user.id).eq("media_title_id", mediaTitleId);
       if (error) throw error;
+
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["watchlist"] }),
   });
@@ -199,9 +202,11 @@ export function useLogEvent() {
     mutationFn: async ({ mediaTitleId, eventType, eventValue }: { mediaTitleId: string; eventType: string; eventValue?: Record<string, unknown> }) => {
       if (!user) return;
       await supabase.from("recommendation_events").insert({
-        user_id: user.id, media_title_id: mediaTitleId, event_type: eventType, event_value: eventValue ?? null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        user_id: user.id, media_title_id: mediaTitleId, event_type: eventType, event_value: (eventValue ?? null) as any,
       });
     },
+
   });
 }
 
