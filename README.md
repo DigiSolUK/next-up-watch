@@ -48,6 +48,26 @@ If the Supabase CLI is not available, run the SQL in `supabase/seed.sql` through
 
 The seed is idempotent. It upserts 20 launch titles and rebuilds their GB streaming availability rows.
 
+## Enrich Existing Titles
+
+This repo also includes a one-shot TMDb backfill for the titles already in the app. It refreshes poster art and public title details without expanding the catalog.
+
+Set these env vars before running it:
+
+```bash
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+TMDB_API_KEY=... # or TMDB_API_READ_ACCESS_TOKEN=...
+```
+
+Then run:
+
+```bash
+npm run enrich:tmdb
+```
+
+The script preserves the app's custom taste/intensity fields and only updates title metadata, artwork, and existing TMDb identifiers.
+
 ## Launch MVP Acceptance
 
 - New users can sign up or confirm by email, then reach `/swipe`.
