@@ -1,10 +1,6 @@
-interface Provider {
-  provider_name: string;
-  availability_type: string;
-  watch_url: string | null;
-}
+import type { StreamingProvider } from "@/lib/types";
 
-export function StreamingProviders({ providers }: { providers: Provider[] }) {
+export function StreamingProviders({ providers }: { providers: StreamingProvider[] }) {
   if (!providers || providers.length === 0) {
     return <p className="text-xs text-muted-foreground">Streaming availability not found yet.</p>;
   }

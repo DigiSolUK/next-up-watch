@@ -24,6 +24,19 @@ function avg(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
+function stableHash(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function stableTitleOrder(titles: MediaTitle[], seed: string): MediaTitle[] {
+  return [...titles].sort((a, b) => stableHash(`${seed}:${a.id}`) - stableHash(`${seed}:${b.id}`));
+}
+
 export function buildTasteProfile(
   ratings: (UserRating & { media: MediaTitle | null })[],
   fallbackType: "movie" | "tv" | "both" = "both",
@@ -119,16 +132,19 @@ export function scoreCandidates(
   settings: UserSettings,
   ratedIds: Set<string>,
   skippedIds: Set<string>,
+  streamableIds?: Set<string>,
 ): ScoredTitle[] {
   return candidates
     .filter((m) => !ratedIds.has(m.id) && !skippedIds.has(m.id))
     .filter((m) => {
+      if (streamableIds && !streamableIds.has(m.id)) return false;
       if (settings.preferred_type !== "both" && m.type !== settings.preferred_type) return false;
       if (settings.hide_horror && (m.horror_level ?? 0) >= 4) return false;
       if (settings.hide_gore && (m.gore_level ?? 0) >= 4) return false;
       if (settings.hide_gruesome_visuals && (m.gruesome_visuals_level ?? 0) >= 4) return false;
       if (settings.hide_graphic_violence && (m.violence_level ?? 0) >= 4) return false;
       if (settings.hide_excessive_slaughter && m.content_warnings.some((w) => /slaughter|gore/i.test(w))) return false;
+      if (settings.hide_pointless_suspense && (m.suspense_level ?? 0) >= 4 && (m.smart_level ?? 3) <= 2) return false;
       if (settings.minimum_rating && (m.rating ?? 0) < settings.minimum_rating) return false;
       return true;
     })
@@ -176,6 +192,8 @@ export function scoreCandidates(
       const year = m.release_year ?? 2000;
       if (settings.prefer_newer_releases && year >= 2018) score += 1;
       if (!settings.include_older_classics && year < 1990) score -= 1;
+      if (settings.prefer_complex_plots && (m.complexity_level ?? 0) >= 4) score += 1.4;
+      if (settings.prefer_twisted_plots && (m.twisted_plot_level ?? 0) >= 4) score += 1.2;
 
       // External rating tiebreaker
       score += ((m.rating ?? 6) - 6) * 0.3;
@@ -191,6 +209,8 @@ export function scoreCandidates(
       if ((m.mystery_level ?? 0) >= 4 && tp.preferred_mystery >= 3.5) reasons.push("mystery-driven plotting");
       if ((m.world_building_level ?? 0) >= 4 && tp.preferred_world_building >= 3.5) reasons.push("strong world-building");
       if ((m.complexity_level ?? 0) >= 4 && tp.preferred_complexity >= 3.5) reasons.push("complex, layered storytelling");
+      if (settings.prefer_twisted_plots && (m.twisted_plot_level ?? 0) >= 4) reasons.push("the twisty plotting you asked for");
+      if (settings.prefer_complex_plots && (m.complexity_level ?? 0) >= 4) reasons.push("the denser storytelling you prefer");
       if ((m.gore_level ?? 1) <= 2 && tp.gore_tolerance < 2.5) reasons.push("no reliance on gore");
       if (!reasons.length && lovedExamples.length) reasons.push("it shares a tone with titles you've loved");
       const reasonText = reasons.length

@@ -1,13 +1,14 @@
 import { useState, useRef, type ReactNode } from "react";
-import type { MediaTitle } from "@/lib/types";
+import type { MediaTitle, StreamingProvider } from "@/lib/types";
 import { ContentBadges } from "./ContentBadges";
 import { StreamingProviders } from "./StreamingProviders";
 import { Star, Film, Tv } from "lucide-react";
 
 interface Props {
   title: MediaTitle;
-  providers?: { provider_name: string; availability_type: string; watch_url: string | null }[];
+  providers?: StreamingProvider[];
   reason?: string;
+  disabled?: boolean;
   onSwipeLeft?: () => void;   // hated
   onSwipeRight?: () => void;  // loved
   onSwipeUp?: () => void;     // liked
@@ -15,21 +16,24 @@ interface Props {
   children?: ReactNode;       // action buttons row
 }
 
-export function SwipeCard({ title, providers, reason, onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown, children }: Props) {
+export function SwipeCard({ title, providers, reason, disabled = false, onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown, children }: Props) {
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const [imgError, setImgError] = useState(false);
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (disabled) return;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     startRef.current = { x: e.clientX, y: e.clientY };
     setDrag({ x: 0, y: 0, active: true });
   };
   const onPointerMove = (e: React.PointerEvent) => {
+    if (disabled) return;
     if (!startRef.current) return;
     setDrag((d) => ({ ...d, x: e.clientX - startRef.current!.x, y: e.clientY - startRef.current!.y, active: true }));
   };
   const onPointerUp = () => {
+    if (disabled) return;
     if (!startRef.current) return;
     const { x, y } = drag;
     const TH = 100;

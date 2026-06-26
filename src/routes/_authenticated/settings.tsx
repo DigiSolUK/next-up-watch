@@ -22,6 +22,8 @@ const TOGGLES: { key: keyof UserSettings; label: string; desc: string }[] = [
   { key: "include_older_classics", label: "Include older classics", desc: "Allow pre-1990 titles." },
 ];
 
+const PROVIDERS = ["Netflix", "Prime Video", "Apple TV"];
+
 function SettingsPage() {
   const { data: settings, isLoading } = useUserSettings();
   const update = useUpdateSettings();
@@ -30,6 +32,13 @@ function SettingsPage() {
 
   const patch = async (p: Partial<UserSettings>) => {
     try { await update.mutateAsync(p); toast.success("Saved."); } catch (e) { toast.error((e as Error).message); }
+  };
+
+  const toggleProvider = (provider: string) => {
+    const selected = new Set(settings.preferred_streaming_providers);
+    if (selected.has(provider)) selected.delete(provider);
+    else selected.add(provider);
+    void patch({ preferred_streaming_providers: [...selected] });
   };
 
   return (
@@ -43,8 +52,9 @@ function SettingsPage() {
           {(["movie", "tv", "both"] as const).map((v) => (
             <button
               key={v}
+              disabled={update.isPending}
               onClick={() => patch({ preferred_type: v })}
-              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${settings.preferred_type === v ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80"}`}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-60 ${settings.preferred_type === v ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80"}`}
             >
               {v === "movie" ? "Movies" : v === "tv" ? "TV" : "Both"}
             </button>
@@ -65,10 +75,44 @@ function SettingsPage() {
                 type="checkbox"
                 checked={Boolean(settings[t.key])}
                 onChange={(e) => patch({ [t.key]: e.target.checked } as Partial<UserSettings>)}
+                disabled={update.isPending}
                 className="mt-1 h-5 w-5 rounded border-input accent-primary"
               />
             </label>
           ))}
+        </div>
+      </section>
+
+      <section className="mt-4 rounded-2xl border border-border bg-card p-5">
+        <h2 className="text-sm font-bold">Streaming</h2>
+        <label className="mt-3 block">
+          <span className="text-xs text-muted-foreground">Region</span>
+          <select
+            value={settings.region}
+            onChange={(e) => patch({ region: e.target.value })}
+            disabled={update.isPending}
+            className="mt-1 w-full rounded-lg border border-input bg-input/40 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="GB">United Kingdom</option>
+          </select>
+        </label>
+        <div className="mt-3">
+          <p className="text-xs text-muted-foreground">Preferred providers</p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {PROVIDERS.map((provider) => {
+              const active = settings.preferred_streaming_providers.includes(provider);
+              return (
+                <button
+                  key={provider}
+                  disabled={update.isPending}
+                  onClick={() => toggleProvider(provider)}
+                  className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-60 ${active ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80"}`}
+                >
+                  {provider}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </section>
 
@@ -80,6 +124,7 @@ function SettingsPage() {
             type="range" min={0} max={9} step={0.5}
             value={settings.minimum_rating}
             onChange={(e) => patch({ minimum_rating: Number(e.target.value) })}
+            disabled={update.isPending}
             className="mt-1 w-full accent-primary"
           />
         </label>
@@ -89,6 +134,7 @@ function SettingsPage() {
             type="range" min={10} max={100} step={5}
             value={settings.learning_threshold}
             onChange={(e) => patch({ learning_threshold: Number(e.target.value) })}
+            disabled={update.isPending}
             className="mt-1 w-full accent-primary"
           />
         </label>

@@ -28,12 +28,17 @@ function AuthPage() {
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { emailRedirectTo: `${window.location.origin}/swipe` },
         });
         if (error) throw error;
+        if (!data.session) {
+          toast.success("Account created. Check your email to confirm your sign in.");
+          setMode("signin");
+          return;
+        }
         toast.success("Account created — let's build your taste profile.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -79,7 +84,7 @@ function AuthPage() {
           {mode === "signup" ? "Create account" : "Sign in"}
         </button>
       </form>
-      <button onClick={() => setMode(mode === "signup" ? "signin" : "signup")} className="mt-4 text-sm text-muted-foreground hover:text-foreground">
+      <button disabled={busy} onClick={() => setMode(mode === "signup" ? "signin" : "signup")} className="mt-4 text-sm text-muted-foreground hover:text-foreground disabled:opacity-60">
         {mode === "signup" ? "Already have an account? Sign in" : "New to NextUp? Create an account"}
       </button>
     </div>
