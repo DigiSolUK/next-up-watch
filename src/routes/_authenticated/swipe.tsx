@@ -35,7 +35,7 @@ function SwipePage() {
   const titleIds = useMemo(() => (titles ?? []).map((t) => t.id), [titles]);
   const streamingByTitle = useStreamingForTitles(titleIds, settings?.region ?? "GB", settings?.preferred_streaming_providers ?? []);
   const remainingTitles = useMemo(() => (titles ?? []).filter((t) => !hiddenByHistoryIds.has(t.id)), [titles, hiddenByHistoryIds]);
-  const activeFilterLabels = useMemo(() => buildActiveFilterLabels(settings), [settings]);
+  const activeFilterLabels = useMemo(() => buildActiveFilterLabels(settings ?? undefined), [settings]);
 
   const streamableIds = useMemo(() => {
     if (!settings?.preferred_streaming_providers.length) return undefined;
