@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import type { MediaTitle, TasteProfile } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/profile")({
-  head: () => ({ meta: [{ title: "Taste Profile — NextUp" }] }),
+  head: () => ({ meta: [{ title: "Taste Profile - NextUp" }] }),
   component: ProfilePage,
 });
 
@@ -34,13 +34,32 @@ function ProfilePage() {
 
   const top = (m: Record<string, number> | undefined, n = 5) =>
     Object.entries(m ?? {}).sort((a, b) => b[1] - a[1]).slice(0, n).map((e) => e[0]);
+  const uniqueSignals = (items: string[], n = 6) => [...new Set(items)].slice(0, n);
+  const confidence = Math.round((profile?.confidence_score ?? 0) * 100);
+  const enjoySignals = tp ? uniqueSignals([...top(tp.favourite_themes, 3), ...top(tp.favourite_genres, 3)]) : [];
+  const avoidSignals = tp ? uniqueSignals([...top(tp.disliked_themes, 3), ...top(tp.disliked_genres, 3)]) : [];
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
-      <h1 className="text-3xl font-bold">Your Taste Profile</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{summary}</p>
+    <div className="mx-auto max-w-3xl px-4 py-5 md:py-6">
+      <h1 className="text-2xl font-bold md:text-3xl">Your Taste Profile</h1>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{summary}</p>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-5">
+      <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-bold">Profile confidence</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {profile?.recommendation_ready ? "Recommendation Mode is unlocked." : "Keep rating to unlock recommendations."}
+            </p>
+          </div>
+          <span className="rounded-full bg-primary/15 px-3 py-1 text-sm font-bold text-primary">{confidence}%</span>
+        </div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-gradient-to-r from-primary to-accent" style={{ width: `${confidence}%` }} />
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-5 gap-2">
         <Stat label="Loved" value={breakdown.loved} tone="var(--loved)" />
         <Stat label="Liked" value={breakdown.liked} tone="var(--liked)" />
         <Stat label="OK" value={breakdown.ok} tone="var(--ok)" />
@@ -49,39 +68,53 @@ function ProfilePage() {
       </div>
 
       {tp && (
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
-          <Card title="Favourite genres" items={top(tp.favourite_genres)} />
-          <Card title="Disliked genres" items={top(tp.disliked_genres)} />
-          <Card title="Themes you enjoy" items={top(tp.favourite_themes)} />
-          <Card title="Themes you avoid" items={top(tp.disliked_themes)} />
-          <Card title="Favourite cast" items={top(tp.favourite_cast)} />
-          <Sliders tp={tp} />
-        </div>
-      )}
+        <>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <SignalCard title="Enjoy" items={enjoySignals} />
+            <SignalCard title="Avoid" items={avoidSignals} />
+          </div>
 
-      <div className="mt-8 rounded-2xl border border-border bg-card p-5">
-        <h3 className="text-sm font-bold">Profile confidence</h3>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-gradient-to-r from-primary to-accent" style={{ width: `${Math.round((profile?.confidence_score ?? 0) * 100)}%` }} />
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">{profile?.recommendation_ready ? "Recommendation Mode is unlocked." : "Keep rating to unlock recommendations."}</p>
-      </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <Card title="Favourite genres" items={top(tp.favourite_genres)} />
+            <Card title="Disliked genres" items={top(tp.disliked_genres)} />
+            <Card title="Themes you enjoy" items={top(tp.favourite_themes)} />
+            <Card title="Themes you avoid" items={top(tp.disliked_themes)} />
+            <Card title="Favourite cast" items={top(tp.favourite_cast)} />
+            <Sliders tp={tp} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-3 text-center">
-      <div className="text-2xl font-extrabold" style={{ color: `oklch(from ${tone} l c h)` }}>{value}</div>
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+    <div className="rounded-xl border border-border bg-card p-2 text-center sm:p-3">
+      <div className="text-xl font-extrabold sm:text-2xl" style={{ color: `oklch(from ${tone} l c h)` }}>{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground sm:text-[11px]">{label}</div>
+    </div>
+  );
+}
+
+function SignalCard({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <h2 className="text-sm font-bold">{title}</h2>
+      {items.length === 0 ? (
+        <p className="mt-2 text-xs text-muted-foreground">Not enough data yet.</p>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {items.map((i) => <span key={i} className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium">{i}</span>)}
+        </div>
+      )}
     </div>
   );
 }
 
 function Card({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
+    <div className="rounded-2xl border border-border bg-card p-4 md:p-5">
       <h3 className="text-sm font-bold">{title}</h3>
       {items.length === 0 ? (
         <p className="mt-2 text-xs text-muted-foreground">Not enough data yet.</p>
@@ -106,12 +139,12 @@ function Sliders({ tp }: { tp: TasteProfile }) {
     { label: "Horror tolerance", v: tp.horror_tolerance },
   ];
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 md:col-span-2">
+    <div className="rounded-2xl border border-border bg-card p-4 md:col-span-2 md:p-5">
       <h3 className="text-sm font-bold">Tone & intensity</h3>
       <div className="mt-3 space-y-2">
         {rows.map((r) => (
           <div key={r.label}>
-            <div className="flex justify-between text-xs"><span>{r.label}</span><span className="text-muted-foreground">{r.v.toFixed(1)} / 5</span></div>
+            <div className="flex justify-between gap-3 text-xs"><span>{r.label}</span><span className="shrink-0 text-muted-foreground">{r.v.toFixed(1)} / 5</span></div>
             <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
               <div className="h-full rounded-full bg-gradient-to-r from-primary to-accent" style={{ width: `${Math.max(0, Math.min(100, (r.v / 5) * 100))}%` }} />
             </div>

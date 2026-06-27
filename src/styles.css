@@ -82,3 +82,9 @@
   background: color-mix(in oklab, var(--card) 80%, transparent);
   backdrop-filter: blur(12px);
 }
+
+@media (max-width: 767px) {
+  #lovable-badge {
+    display: none !important;
+  }
+}

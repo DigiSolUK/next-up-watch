@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMediaTitles, useUserRatings, useUserSettings, useRateTitle, useAddToWatchlist, useLogEvent, useUserProfile, useWatchlist, useStreamingForTitles, useImportMoreTmdbTitles } from "@/hooks/use-nextup-data";
 import { SwipeCard } from "@/components/SwipeCard";
 import { RatingButtons } from "@/components/RatingButtons";
 import { buildTasteProfile, scoreCandidates, stableTitleOrder } from "@/lib/recommend";
 import type { MediaTitle, RatingValue, TasteProfile, UserSettings, WatchStatus } from "@/lib/types";
-import { ArrowRight, Loader2, RotateCcw, Sparkles, SlidersHorizontal, Target } from "lucide-react";
+import { ArrowRight, Loader2, RefreshCcw, RotateCcw, Sparkles, SlidersHorizontal, Target } from "lucide-react";
 import { toast } from "sonner";
 
 const WATCHLIST_GOAL = 5;
@@ -27,6 +27,8 @@ function SwipePage() {
   const { data: watchlist } = useWatchlist();
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
   const [catalogImportAttemptKey, setCatalogImportAttemptKey] = useState<string | null>(null);
+  const [catalogImportResult, setCatalogImportResult] = useState<{ key: string; added: number; scanned: number } | null>(null);
+  const [catalogImportError, setCatalogImportError] = useState<string | null>(null);
 
   const rate = useRateTitle();
   const addWatch = useAddToWatchlist();
@@ -145,23 +147,37 @@ function SwipePage() {
   const currentProviders = current ? streamingByTitle.data?.[current.title.id] : undefined;
   const busy = rate.isPending || addWatch.isPending || logEvent.isPending;
   const streamingFilterLoading = Boolean(settings?.preferred_streaming_providers.length && streamingByTitle.isLoading);
+  const catalogImportExhausted = catalogImportResult?.key === catalogImportKey && catalogImportResult.added === 0;
+  const catalogImportErrorMessage = catalogImportAttemptKey === catalogImportKey ? catalogImportError : null;
+
+  const runCatalogImport = useCallback((manual = false) => {
+    if (importMoreTitles.isPending) return;
+
+    setCatalogImportAttemptKey(catalogImportKey);
+    setCatalogImportError(null);
+    importMoreTitles.mutate(undefined, {
+      onSuccess: (result) => {
+        setCatalogImportResult({ key: catalogImportKey, added: result.added, scanned: result.scanned });
+        if (result.added > 0) {
+          toast.success(`Added ${result.added} fresh TMDb picks.`);
+        } else if (manual || queue.length === 0) {
+          toast.info("TMDb did not find fresh matches for those filters yet.");
+        }
+      },
+      onError: (error) => {
+        const message = (error as Error).message;
+        setCatalogImportError(message);
+        toast.error(message);
+      },
+    });
+  }, [catalogImportKey, importMoreTitles, queue.length]);
 
   useEffect(() => {
     if (!ready || watchlistGoalReached || titlesLoading || ratingsLoading || settingsLoading || streamingFilterLoading) return;
     if (queue.length > 3 || importMoreTitles.isPending) return;
     if (catalogImportAttemptKey === catalogImportKey) return;
 
-    setCatalogImportAttemptKey(catalogImportKey);
-    importMoreTitles.mutate(undefined, {
-      onSuccess: (result) => {
-        if (result.added > 0) {
-          toast.success(`Added ${result.added} fresh TMDb picks.`);
-        } else if (queue.length === 0) {
-          toast.info("TMDb did not find fresh matches for those filters yet.");
-        }
-      },
-      onError: (error) => toast.error((error as Error).message),
-    });
+    runCatalogImport(false);
   }, [
     catalogImportAttemptKey,
     catalogImportKey,
@@ -173,6 +189,7 @@ function SwipePage() {
     streamingFilterLoading,
     titlesLoading,
     watchlistGoalReached,
+    runCatalogImport,
   ]);
 
   if (titlesLoading || ratingsLoading || settingsLoading) {
@@ -285,8 +302,11 @@ function SwipePage() {
           watchlistGoal={WATCHLIST_GOAL}
           goalReached={watchlistGoalReached}
           importingCatalog={importMoreTitles.isPending}
+          catalogImportExhausted={catalogImportExhausted}
+          catalogImportError={catalogImportErrorMessage}
           skippedCount={skippedIds.size}
           activeFilterLabels={activeFilterLabels}
+          onImportMore={() => runCatalogImport(true)}
           onRestoreSkipped={() => {
             setSkippedIds(new Set());
             toast.info("Skipped titles are back in the queue.");
@@ -327,8 +347,11 @@ function QueueEmptyState({
   watchlistGoal,
   goalReached,
   importingCatalog,
+  catalogImportExhausted,
+  catalogImportError,
   skippedCount,
   activeFilterLabels,
+  onImportMore,
   onRestoreSkipped,
 }: {
   ready: boolean;
@@ -340,31 +363,42 @@ function QueueEmptyState({
   watchlistGoal: number;
   goalReached: boolean;
   importingCatalog: boolean;
+  catalogImportExhausted: boolean;
+  catalogImportError: string | null;
   skippedCount: number;
   activeFilterLabels: string[];
+  onImportMore: () => void;
   onRestoreSkipped: () => void;
 }) {
   const hasFilters = !goalReached && activeFilterLabels.length > 0;
   const canRestoreSkipped = skippedCount > 0;
   const progress = threshold > 0 ? Math.min(100, (ratedCount / threshold) * 100) : 0;
   const title = importingCatalog && ready && !goalReached
-    ? "Finding more TMDb picks"
+    ? "Finding more titles"
     : goalReached
     ? `You've got ${watchlistGoal} ready to watch`
+    : catalogImportError && ready
+      ? "Could not fetch more titles"
+    : catalogImportExhausted && ready
+      ? "No fresh matches for these filters"
     : ready
-      ? "No fresh picks left right now"
+      ? "Find more titles"
       : "Keep rating to unlock recommendations";
   const message = importingCatalog && ready && !goalReached
     ? "NextUp is pulling in another batch from TMDb with posters, details, and GB streaming options."
     : goalReached
     ? "Your watchlist has enough to choose from. Watch a couple, mark them watched, then come back and NextUp will find the next batch."
+    : catalogImportError && ready
+      ? `${catalogImportError} Try again, or loosen provider and rating filters if the API keeps coming back empty.`
+    : catalogImportExhausted && ready
+      ? "TMDb checked the current filters but did not find fresh matches. Loosen provider or rating filters, restore skipped titles, or try again."
     : !ready
       ? totalTitles > 0
         ? `You're in learning mode and have rated ${ratedCount} of ${threshold} titles. A few more swipes will unlock the recommendation queue.`
         : "There isn't enough catalog data yet to build a learning queue."
       : freshCandidateCount > 0
         ? "Your remaining titles are blocked by stricter filters. Loosen them to keep building your watchlist."
-        : "You've rated, saved, or skipped every fresh title in the current catalog. Add more Movie API titles to keep recommendations flowing.";
+        : "The local catalog is thin for your current filters. Pull another TMDb batch to keep building your watchlist.";
 
   return (
     <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
@@ -422,9 +456,24 @@ function QueueEmptyState({
       )}
 
       <div className="mt-6 flex flex-wrap gap-3">
+        {!goalReached && ready && (
+          <button
+            type="button"
+            onClick={onImportMore}
+            disabled={importingCatalog}
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {importingCatalog ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+            {catalogImportError ? "Try again" : "Find more titles"}
+          </button>
+        )}
         <Link
           to="/watchlist"
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+            goalReached
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "border border-border hover:bg-secondary"
+          }`}
         >
           {goalReached ? "Watch from your list" : "View watchlist"}
           <ArrowRight className="h-4 w-4" />

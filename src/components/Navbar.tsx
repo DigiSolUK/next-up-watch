@@ -3,7 +3,7 @@ import { Film, Bookmark, User, Settings, LogOut, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 const linkClass =
-  "flex flex-col items-center gap-1 px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground data-[status=active]:text-primary";
+  "flex min-h-14 flex-col items-center justify-center gap-1 px-2 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground data-[status=active]:text-primary";
 
 export function Navbar() {
   const { signOut, user } = useAuth();
@@ -31,7 +31,7 @@ export function Navbar() {
         </div>
       </header>
       {/* Bottom bar (mobile) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-4 border-t border-border bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-4 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_28px_rgba(0,0,0,0.22)] backdrop-blur md:hidden">
         <Link to="/swipe" className={linkClass}><Film className="h-5 w-5" /><span>Swipe</span></Link>
         <Link to="/watchlist" className={linkClass}><Bookmark className="h-5 w-5" /><span>List</span></Link>
         <Link to="/profile" className={linkClass}><User className="h-5 w-5" /><span>Taste</span></Link>

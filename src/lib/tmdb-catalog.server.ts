@@ -9,8 +9,9 @@ type StreamingInsert = Database["public"]["Tables"]["streaming_availability"]["I
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w780";
 const PROVIDER_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w92";
-const IMPORT_LIMIT = 12;
-const DISCOVERY_PAGES = 3;
+const IMPORT_LIMIT = 24;
+const DISCOVERY_PAGES = 8;
+const CANDIDATE_TARGET = IMPORT_LIMIT * 4;
 
 interface TmdbGenre {
   id: number;
@@ -178,29 +179,50 @@ async function getProviderIds(type: MediaType, region: string, preferredProvider
 async function discoverCandidates(type: MediaType, settings: UserSettings | null, existingExternalIds: Set<string>) {
   const region = settings?.region ?? "GB";
   const providerIds = await getProviderIds(type, region, settings?.preferred_streaming_providers ?? []);
-  const minimumRating = Math.max(6.5, Number(settings?.minimum_rating ?? 0));
+  const strictMinimumRating = Math.max(6.5, Number(settings?.minimum_rating ?? 0));
+  const broadMinimumRating = Math.max(5.8, Number(settings?.minimum_rating ?? 0));
   const candidates: Array<{ type: MediaType; id: number }> = [];
+  const candidateKeys = new Set<string>();
 
-  for (let page = 1; page <= DISCOVERY_PAGES && candidates.length < IMPORT_LIMIT * 2; page++) {
-    const response = await tmdbFetch<TmdbDiscoverResponse>(`/discover/${type}`, {
-      include_adult: false,
-      include_video: false,
-      language: "en-GB",
-      page,
-      region,
-      sort_by: "popularity.desc",
-      "vote_average.gte": minimumRating,
-      "vote_count.gte": type === "movie" ? 300 : 150,
-      watch_region: region,
-      with_watch_monetization_types: "flatrate|free|rent|buy",
-      with_watch_providers: providerIds.length ? providerIds.join("|") : undefined,
-    });
+  const addCandidate = (item: TmdbDiscoveryItem) => {
+    const key = `${type}-${item.id}`;
+    if (!item.poster_path || !item.overview) return;
+    if (existingExternalIds.has(key) || candidateKeys.has(key)) return;
+    candidateKeys.add(key);
+    candidates.push({ type, id: item.id });
+  };
 
-    for (const item of response.results ?? []) {
-      if (!item.poster_path || !item.overview) continue;
-      if (existingExternalIds.has(`${type}-${item.id}`)) continue;
-      candidates.push({ type, id: item.id });
+  const discover = async (options: { providerFiltered: boolean; minimumRating: number; sortBy: string; voteCount: number }) => {
+    for (let page = 1; page <= DISCOVERY_PAGES && candidates.length < CANDIDATE_TARGET; page++) {
+      const response = await tmdbFetch<TmdbDiscoverResponse>(`/discover/${type}`, {
+        include_adult: false,
+        include_video: false,
+        language: "en-GB",
+        page,
+        region,
+        sort_by: options.sortBy,
+        "vote_average.gte": options.minimumRating,
+        "vote_count.gte": options.voteCount,
+        watch_region: region,
+        with_watch_monetization_types: "flatrate|free|rent|buy",
+        with_watch_providers: options.providerFiltered && providerIds.length ? providerIds.join("|") : undefined,
+      });
+
+      for (const item of response.results ?? []) addCandidate(item);
     }
+  };
+
+  const discoveryPasses = [
+    { providerFiltered: true, minimumRating: strictMinimumRating, sortBy: "popularity.desc", voteCount: type === "movie" ? 300 : 150 },
+    { providerFiltered: true, minimumRating: strictMinimumRating, sortBy: "vote_count.desc", voteCount: type === "movie" ? 250 : 120 },
+    { providerFiltered: true, minimumRating: broadMinimumRating, sortBy: "popularity.desc", voteCount: type === "movie" ? 120 : 60 },
+    { providerFiltered: false, minimumRating: strictMinimumRating, sortBy: "popularity.desc", voteCount: type === "movie" ? 300 : 150 },
+    { providerFiltered: false, minimumRating: broadMinimumRating, sortBy: "vote_count.desc", voteCount: type === "movie" ? 120 : 60 },
+  ];
+
+  for (const pass of discoveryPasses) {
+    await discover(pass);
+    if (candidates.length >= CANDIDATE_TARGET) break;
   }
 
   return candidates;
