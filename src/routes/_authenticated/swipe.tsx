@@ -1,17 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useMediaTitles, useUserRatings, useUserSettings, useRateTitle, useAddToWatchlist, useLogEvent, useUserProfile, useWatchlist, useStreamingForTitles } from "@/hooks/use-nextup-data";
+import { useEffect, useMemo, useState } from "react";
+import { useMediaTitles, useUserRatings, useUserSettings, useRateTitle, useAddToWatchlist, useLogEvent, useUserProfile, useWatchlist, useStreamingForTitles, useImportMoreTmdbTitles } from "@/hooks/use-nextup-data";
 import { SwipeCard } from "@/components/SwipeCard";
 import { RatingButtons } from "@/components/RatingButtons";
 import { buildTasteProfile, scoreCandidates, stableTitleOrder } from "@/lib/recommend";
-import type { MediaTitle, RatingValue, TasteProfile, UserSettings } from "@/lib/types";
+import type { MediaTitle, RatingValue, TasteProfile, UserSettings, WatchStatus } from "@/lib/types";
 import { ArrowRight, Loader2, RotateCcw, Sparkles, SlidersHorizontal, Target } from "lucide-react";
 import { toast } from "sonner";
+
+const WATCHLIST_GOAL = 5;
 
 export const Route = createFileRoute("/_authenticated/swipe")({
   head: () => ({ meta: [{ title: "Swipe - NextUp" }] }),
   component: SwipePage,
 });
+
+function isActiveWatchlistItem(status: WatchStatus) {
+  return status === "want_to_watch" || status === "watching";
+}
 
 function SwipePage() {
   const { data: titles, isLoading: titlesLoading, isError: titlesError, error: titlesLoadError } = useMediaTitles();
@@ -20,10 +26,12 @@ function SwipePage() {
   const { data: profile } = useUserProfile();
   const { data: watchlist } = useWatchlist();
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
+  const [catalogImportAttemptKey, setCatalogImportAttemptKey] = useState<string | null>(null);
 
   const rate = useRateTitle();
   const addWatch = useAddToWatchlist();
   const logEvent = useLogEvent();
+  const importMoreTitles = useImportMoreTmdbTitles();
 
   const ratedCount = (ratings ?? []).filter((r) => r.rating_value !== "not_seen").length;
   const threshold = settings?.learning_threshold ?? 50;
@@ -31,16 +39,31 @@ function SwipePage() {
 
   const ratedIdSet = useMemo(() => new Set((ratings ?? []).map((r) => r.media_title_id)), [ratings]);
   const watchlistIdSet = useMemo(() => new Set((watchlist ?? []).map((w) => w.media_title_id)), [watchlist]);
+  const activeWatchlistCount = useMemo(
+    () => (watchlist ?? []).filter((item) => isActiveWatchlistItem(item.status)).length,
+    [watchlist],
+  );
+  const watchlistGoalReached = ready && activeWatchlistCount >= WATCHLIST_GOAL;
   const hiddenByHistoryIds = useMemo(() => new Set([...ratedIdSet, ...skippedIds, ...watchlistIdSet]), [ratedIdSet, skippedIds, watchlistIdSet]);
   const titleIds = useMemo(() => (titles ?? []).map((t) => t.id), [titles]);
   const streamingByTitle = useStreamingForTitles(titleIds, settings?.region ?? "GB", settings?.preferred_streaming_providers ?? []);
-  const remainingTitles = useMemo(() => (titles ?? []).filter((t) => !hiddenByHistoryIds.has(t.id)), [titles, hiddenByHistoryIds]);
-  const activeFilterLabels = useMemo(() => buildActiveFilterLabels(settings), [settings]);
-
   const streamableIds = useMemo(() => {
     if (!settings?.preferred_streaming_providers.length) return undefined;
     return new Set(Object.keys(streamingByTitle.data ?? {}));
   }, [settings?.preferred_streaming_providers.length, streamingByTitle.data]);
+  const freshCandidateCount = useMemo(
+    () => (titles ?? []).filter((t) => !hiddenByHistoryIds.has(t.id)).length,
+    [titles, hiddenByHistoryIds],
+  );
+  const availableFallbackTitles = useMemo(
+    () => (titles ?? []).filter((t) => isFallbackCandidate(t, settings, ratedIdSet, watchlistIdSet, skippedIds, streamableIds)),
+    [titles, settings, ratedIdSet, watchlistIdSet, skippedIds, streamableIds],
+  );
+  const activeFilterLabels = useMemo(() => buildActiveFilterLabels(settings), [settings]);
+  const catalogImportKey = useMemo(
+    () => `${titles?.length ?? 0}:${activeFilterLabels.join("|")}`,
+    [titles?.length, activeFilterLabels],
+  );
 
   const titleMap = useMemo(() => {
     const m = new Map<string, MediaTitle>();
@@ -58,6 +81,8 @@ function SwipePage() {
 
   const queue: { title: MediaTitle; reason?: string }[] = useMemo(() => {
     if (!titles) return [];
+    if (watchlistGoalReached) return [];
+
     if (!ready) {
       const pool = titles.filter((t) => !hiddenByHistoryIds.has(t.id));
       const seen = new Set<string>();
@@ -86,12 +111,69 @@ function SwipePage() {
       new Set([...skippedIds, ...watchlistIdSet]),
       streamableIds,
     );
-    return scored.slice(0, 30).map((s) => ({ title: s.title, reason: s.reason }));
-  }, [titles, ratedIdSet, skippedIds, watchlistIdSet, hiddenByHistoryIds, ready, tasteProfile, settings, streamableIds, ratedCount, threshold]);
+    const personalized = scored.slice(0, 30).map((s) => ({ title: s.title, reason: s.reason }));
+    const personalizedIds = new Set(personalized.map((item) => item.title.id));
+    const fallback = stableTitleOrder(
+      availableFallbackTitles.filter((title) => !personalizedIds.has(title.id)),
+      `watchlist-goal-${ratedCount}-${activeWatchlistCount}`,
+    )
+      .slice(0, Math.max(0, 30 - personalized.length))
+      .map((title) => ({
+        title,
+        reason: "A broader pick so you can keep building your watchlist.",
+      }));
+
+    return [...personalized, ...fallback];
+  }, [
+    titles,
+    watchlistGoalReached,
+    ratedIdSet,
+    skippedIds,
+    watchlistIdSet,
+    hiddenByHistoryIds,
+    ready,
+    tasteProfile,
+    settings,
+    streamableIds,
+    ratedCount,
+    threshold,
+    availableFallbackTitles,
+    activeWatchlistCount,
+  ]);
 
   const current = queue[0];
   const currentProviders = current ? streamingByTitle.data?.[current.title.id] : undefined;
   const busy = rate.isPending || addWatch.isPending || logEvent.isPending;
+  const streamingFilterLoading = Boolean(settings?.preferred_streaming_providers.length && streamingByTitle.isLoading);
+
+  useEffect(() => {
+    if (!ready || watchlistGoalReached || titlesLoading || ratingsLoading || settingsLoading || streamingFilterLoading) return;
+    if (queue.length > 3 || importMoreTitles.isPending) return;
+    if (catalogImportAttemptKey === catalogImportKey) return;
+
+    setCatalogImportAttemptKey(catalogImportKey);
+    importMoreTitles.mutate(undefined, {
+      onSuccess: (result) => {
+        if (result.added > 0) {
+          toast.success(`Added ${result.added} fresh TMDb picks.`);
+        } else if (queue.length === 0) {
+          toast.info("TMDb did not find fresh matches for those filters yet.");
+        }
+      },
+      onError: (error) => toast.error((error as Error).message),
+    });
+  }, [
+    catalogImportAttemptKey,
+    catalogImportKey,
+    importMoreTitles,
+    queue.length,
+    ratingsLoading,
+    ready,
+    settingsLoading,
+    streamingFilterLoading,
+    titlesLoading,
+    watchlistGoalReached,
+  ]);
 
   if (titlesLoading || ratingsLoading || settingsLoading) {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
@@ -131,7 +213,12 @@ function SwipePage() {
         toast.info("Already in your watchlist.");
       } else {
         await addWatch.mutateAsync(current.title.id);
-        toast.success("Added to watchlist.");
+        const nextCount = Math.min(WATCHLIST_GOAL, activeWatchlistCount + 1);
+        toast.success(
+          nextCount >= WATCHLIST_GOAL
+            ? "Watchlist ready. Watch these, then come back for more."
+            : `Added to watchlist (${nextCount}/${WATCHLIST_GOAL}).`,
+        );
       }
       advanceCurrent();
     } catch (e) {
@@ -168,10 +255,19 @@ function SwipePage() {
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
           {ready
-            ? "These are picked for you. Keep rating - NextUp keeps learning."
+            ? watchlistGoalReached
+              ? "Watch the titles on your list, then come back for more."
+              : `Pick ${Math.max(0, WATCHLIST_GOAL - activeWatchlistCount)} more for your watchlist. Keep rating - NextUp keeps learning.`
             : `Training your taste profile: ${ratedCount} / ${threshold} rated`}
         </p>
-        {!ready && (
+        {ready ? (
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all"
+              style={{ width: `${Math.min(100, (activeWatchlistCount / WATCHLIST_GOAL) * 100)}%` }}
+            />
+          </div>
+        ) : (
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all" style={{ width: `${Math.min(100, (ratedCount / threshold) * 100)}%` }} />
           </div>
@@ -184,9 +280,12 @@ function SwipePage() {
           ratedCount={ratedCount}
           threshold={threshold}
           totalTitles={titles?.length ?? 0}
-          remainingCount={remainingTitles.length}
+          freshCandidateCount={freshCandidateCount}
+          activeWatchlistCount={activeWatchlistCount}
+          watchlistGoal={WATCHLIST_GOAL}
+          goalReached={watchlistGoalReached}
+          importingCatalog={importMoreTitles.isPending}
           skippedCount={skippedIds.size}
-          watchlistCount={watchlistIdSet.size}
           activeFilterLabels={activeFilterLabels}
           onRestoreSkipped={() => {
             setSkippedIds(new Set());
@@ -223,9 +322,12 @@ function QueueEmptyState({
   ratedCount,
   threshold,
   totalTitles,
-  remainingCount,
+  freshCandidateCount,
+  activeWatchlistCount,
+  watchlistGoal,
+  goalReached,
+  importingCatalog,
   skippedCount,
-  watchlistCount,
   activeFilterLabels,
   onRestoreSkipped,
 }: {
@@ -233,55 +335,73 @@ function QueueEmptyState({
   ratedCount: number;
   threshold: number;
   totalTitles: number;
-  remainingCount: number;
+  freshCandidateCount: number;
+  activeWatchlistCount: number;
+  watchlistGoal: number;
+  goalReached: boolean;
+  importingCatalog: boolean;
   skippedCount: number;
-  watchlistCount: number;
   activeFilterLabels: string[];
   onRestoreSkipped: () => void;
 }) {
-  const hasFilters = activeFilterLabels.length > 0;
+  const hasFilters = !goalReached && activeFilterLabels.length > 0;
   const canRestoreSkipped = skippedCount > 0;
   const progress = threshold > 0 ? Math.min(100, (ratedCount / threshold) * 100) : 0;
-  const message = !ready
-    ? totalTitles > 0
-      ? `You're in learning mode and have rated ${ratedCount} of ${threshold} titles. A few more swipes will unlock the recommendation queue.`
-      : "There isn't enough catalog data yet to build a learning queue."
-    : remainingCount > 0
-      ? "There are still titles in the catalog, but your current settings and watch history are filtering them all out."
-      : "You've already rated, saved, or skipped everything in the current catalog.";
+  const title = importingCatalog && ready && !goalReached
+    ? "Finding more TMDb picks"
+    : goalReached
+    ? `You've got ${watchlistGoal} ready to watch`
+    : ready
+      ? "No fresh picks left right now"
+      : "Keep rating to unlock recommendations";
+  const message = importingCatalog && ready && !goalReached
+    ? "NextUp is pulling in another batch from TMDb with posters, details, and GB streaming options."
+    : goalReached
+    ? "Your watchlist has enough to choose from. Watch a couple, mark them watched, then come back and NextUp will find the next batch."
+    : !ready
+      ? totalTitles > 0
+        ? `You're in learning mode and have rated ${ratedCount} of ${threshold} titles. A few more swipes will unlock the recommendation queue.`
+        : "There isn't enough catalog data yet to build a learning queue."
+      : freshCandidateCount > 0
+        ? "Your remaining titles are blocked by stricter filters. Loosen them to keep building your watchlist."
+        : "You've rated, saved, or skipped every fresh title in the current catalog. Add more Movie API titles to keep recommendations flowing.";
 
   return (
     <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-          {ready ? <Sparkles className="h-5 w-5" /> : <Target className="h-5 w-5" />}
+          {importingCatalog && ready && !goalReached ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : ready ? (
+            <Sparkles className="h-5 w-5" />
+          ) : (
+            <Target className="h-5 w-5" />
+          )}
         </div>
         <div className="flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             {ready ? "Recommendation Mode" : "Learning Mode"}
           </p>
-          <h3 className="mt-2 text-2xl font-bold">
-            {ready ? "You're all caught up" : "Keep rating to unlock recommendations"}
-          </h3>
+          <h3 className="mt-2 text-2xl font-bold">{title}</h3>
           <p className="mt-2 text-sm text-muted-foreground">{message}</p>
         </div>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <StatCard
-          label={ready ? "Remaining in catalog" : "Progress to unlock"}
-          value={ready ? String(remainingCount) : `${ratedCount}/${threshold}`}
-          note={ready ? "Still hidden by your filters" : `${Math.round(progress)}% complete`}
+          label="Active watchlist"
+          value={`${Math.min(activeWatchlistCount, watchlistGoal)}/${watchlistGoal}`}
+          note={goalReached ? "Ready for viewing" : `${Math.max(0, watchlistGoal - activeWatchlistCount)} more to pick`}
         />
         <StatCard
-          label="Watchlist"
-          value={String(watchlistCount)}
-          note="Saved titles stay out of the swipe queue"
+          label="Rated titles"
+          value={String(ratedCount)}
+          note={ready ? "Taste profile unlocked" : `${Math.round(progress)}% to recommendations`}
         />
         <StatCard
-          label="Skipped this session"
+          label="Skipped"
           value={String(skippedCount)}
-          note={canRestoreSkipped ? "You can bring these back" : "Nothing skipped yet"}
+          note={canRestoreSkipped ? "Can be restored this session" : "Nothing skipped this session"}
         />
       </div>
 
@@ -303,20 +423,22 @@ function QueueEmptyState({
 
       <div className="mt-6 flex flex-wrap gap-3">
         <Link
-          to="/settings"
+          to="/watchlist"
           className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          Open settings
-          <SlidersHorizontal className="h-4 w-4" />
-        </Link>
-        <Link
-          to="/watchlist"
-          className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-secondary"
-        >
-          View watchlist
+          {goalReached ? "Watch from your list" : "View watchlist"}
           <ArrowRight className="h-4 w-4" />
         </Link>
-        {ready && canRestoreSkipped && (
+        {!goalReached && (
+          <Link
+            to="/settings"
+            className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-secondary"
+          >
+            Open settings
+            <SlidersHorizontal className="h-4 w-4" />
+          </Link>
+        )}
+        {!goalReached && canRestoreSkipped && (
           <button
             type="button"
             onClick={onRestoreSkipped}
@@ -329,8 +451,12 @@ function QueueEmptyState({
       </div>
 
       <p className="mt-4 text-xs text-muted-foreground">
-        {ready
-          ? "If things still feel sparse after loosening filters, a few more ratings will make the next batch sharper."
+        {goalReached
+          ? "When you mark something as watched, your active list drops below the goal and recommendations will open again."
+          : importingCatalog && ready
+            ? "Fresh titles will appear here automatically as soon as the import finishes."
+          : ready
+            ? "NextUp will keep offering broader picks until your active watchlist reaches five."
           : "Once you hit the unlock threshold, we switch from learning your taste to serving recommendations."}
       </p>
     </div>
@@ -345,6 +471,28 @@ function StatCard({ label, value, note }: { label: string; value: string; note: 
       <p className="mt-1 text-xs text-muted-foreground">{note}</p>
     </div>
   );
+}
+
+function isFallbackCandidate(
+  title: MediaTitle,
+  settings: UserSettings | undefined | null,
+  ratedIdSet: Set<string>,
+  watchlistIdSet: Set<string>,
+  skippedIds: Set<string>,
+  streamableIds?: Set<string>,
+) {
+  if (ratedIdSet.has(title.id) || watchlistIdSet.has(title.id) || skippedIds.has(title.id)) return false;
+  if (!settings) return true;
+  if (settings.preferred_type !== "both" && title.type !== settings.preferred_type) return false;
+  if (settings.preferred_streaming_providers.length && !streamableIds?.has(title.id)) return false;
+  if (settings.minimum_rating > 0 && (title.rating ?? 0) < settings.minimum_rating) return false;
+  if (settings.hide_horror && (title.horror_level ?? 0) >= 4) return false;
+  if (settings.hide_gore && (title.gore_level ?? 0) >= 4) return false;
+  if (settings.hide_gruesome_visuals && (title.gruesome_visuals_level ?? 0) >= 4) return false;
+  if (settings.hide_graphic_violence && (title.violence_level ?? 0) >= 4) return false;
+  if (settings.hide_excessive_slaughter && title.content_warnings.some((warning) => /slaughter|gore/i.test(warning))) return false;
+  if (settings.hide_pointless_suspense && (title.suspense_level ?? 0) >= 4 && (title.smart_level ?? 3) <= 2) return false;
+  return true;
 }
 
 function buildActiveFilterLabels(settings: UserSettings | undefined): string[] {

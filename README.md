@@ -19,7 +19,14 @@ VITE_SUPABASE_URL=...
 VITE_SUPABASE_PUBLISHABLE_KEY=...
 ```
 
-Only server-only admin code should ever use `SUPABASE_SERVICE_ROLE_KEY`. Do not expose service-role keys with `VITE_`.
+Runtime TMDb catalog expansion also needs these server-only values in the deployment environment:
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=...
+TMDB_API_KEY=... # or TMDB_API_READ_ACCESS_TOKEN=...
+```
+
+Only server-only admin code should ever use `SUPABASE_SERVICE_ROLE_KEY` or TMDb credentials. Do not expose service-role or TMDb keys with `VITE_`.
 
 ## Local Setup
 
@@ -50,7 +57,7 @@ The seed is idempotent. It upserts 20 launch titles and rebuilds their GB stream
 
 ## Enrich Existing Titles
 
-This repo also includes a one-shot TMDb backfill for the titles already in the app. It refreshes poster art and public title details without expanding the catalog.
+This repo includes a one-shot TMDb backfill for the titles already in the app. It refreshes poster art and public title details without expanding the catalog.
 
 Set these env vars before running it:
 
@@ -67,6 +74,10 @@ npm run enrich:tmdb
 ```
 
 The script preserves the app's custom taste/intensity fields and only updates title metadata, artwork, and existing TMDb identifiers.
+
+## Runtime TMDb Expansion
+
+When Recommendation Mode runs low before the user has five active watchlist picks, Swipe calls a server-only TMDb importer. It adds a small batch of fresh movie/TV rows plus GB streaming availability, then refreshes the local catalog automatically. The importer uses the signed-in user's settings for type, rating, region, and preferred providers.
 
 ## Launch MVP Acceptance
 

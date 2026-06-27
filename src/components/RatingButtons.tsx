@@ -16,6 +16,17 @@ const base =
 export function RatingButtons({ onRate, mode = "learning", onAddWatchlist, onNotInterested, onSkip, disabled = false }: Props) {
   return (
     <div className="space-y-2">
+      {mode === "recommendation" && (
+        <button
+          disabled={disabled || !onAddWatchlist}
+          aria-label="Add to watchlist"
+          onClick={onAddWatchlist}
+          className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--watchlist)] px-4 py-3 text-sm font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
+        >
+          <BookmarkPlus className="h-5 w-5" />
+          <span>Add to watchlist</span>
+        </button>
+      )}
       <div className="grid grid-cols-5 gap-2">
         <button disabled={disabled} aria-label="Rate as loved" onClick={() => onRate("loved")} className={`${base} bg-[color:var(--loved)]`}>
           <Heart className="h-5 w-5" /><span>Loved</span>
@@ -34,14 +45,11 @@ export function RatingButtons({ onRate, mode = "learning", onAddWatchlist, onNot
         </button>
       </div>
       {mode === "recommendation" && (
-        <div className="grid grid-cols-3 gap-2">
-          <button disabled={disabled} aria-label="Add to watchlist" onClick={onAddWatchlist} className={`${base} bg-[color:var(--watchlist)]`}>
-            <BookmarkPlus className="h-5 w-5" /><span>Watchlist</span>
-          </button>
-          <button disabled={disabled} aria-label="Mark not interested" onClick={onNotInterested} className={`${base} bg-muted text-foreground`}>
+        <div className="grid grid-cols-2 gap-2">
+          <button disabled={disabled || !onNotInterested} aria-label="Mark not interested" onClick={onNotInterested} className={`${base} bg-muted text-foreground`}>
             <X className="h-5 w-5" /><span>Not now</span>
           </button>
-          <button disabled={disabled} aria-label="Skip this title" onClick={onSkip} className={`${base} bg-muted text-foreground`}>
+          <button disabled={disabled || !onSkip} aria-label="Skip this title" onClick={onSkip} className={`${base} bg-muted text-foreground`}>
             <SkipForward className="h-5 w-5" /><span>Skip</span>
           </button>
         </div>
