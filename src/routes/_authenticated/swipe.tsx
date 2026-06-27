@@ -59,7 +59,7 @@ function SwipePage() {
     () => (titles ?? []).filter((t) => isFallbackCandidate(t, settings, ratedIdSet, watchlistIdSet, skippedIds, streamableIds)),
     [titles, settings, ratedIdSet, watchlistIdSet, skippedIds, streamableIds],
   );
-  const activeFilterLabels = useMemo(() => buildActiveFilterLabels(settings), [settings]);
+  const activeFilterLabels = useMemo(() => buildActiveFilterLabels(settings ?? undefined), [settings]);
   const catalogImportKey = useMemo(
     () => `${titles?.length ?? 0}:${activeFilterLabels.join("|")}`,
     [titles?.length, activeFilterLabels],
