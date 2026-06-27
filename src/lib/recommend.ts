@@ -19,6 +19,36 @@ function bump(map: Record<string, number>, key: string, by: number) {
   map[key] = (map[key] ?? 0) + by;
 }
 
+function reconcilePreferenceMaps(
+  positive: Record<string, number>,
+  negative: Record<string, number>,
+  options: { negativeDominance?: number; minimumPositiveNet?: number; minimumNegativeNet?: number } = {},
+) {
+  const negativeDominance = options.negativeDominance ?? 2.25;
+  const minimumPositiveNet = options.minimumPositiveNet ?? 0.5;
+  const minimumNegativeNet = options.minimumNegativeNet ?? 1.25;
+  const positiveOnly: Record<string, number> = {};
+  const negativeOnly: Record<string, number> = {};
+  const keys = new Set([...Object.keys(positive), ...Object.keys(negative)]);
+
+  for (const key of keys) {
+    const positiveScore = positive[key] ?? 0;
+    const negativeScore = negative[key] ?? 0;
+    const net = positiveScore - negativeScore;
+
+    if (net >= minimumPositiveNet) {
+      positiveOnly[key] = net;
+    } else if (
+      -net >= minimumNegativeNet
+      && negativeScore >= Math.max(minimumNegativeNet, positiveScore * negativeDominance)
+    ) {
+      negativeOnly[key] = -net;
+    }
+  }
+
+  return [positiveOnly, negativeOnly] as const;
+}
+
 function avg(values: number[]): number {
   if (!values.length) return 3;
   return values.reduce((a, b) => a + b, 0) / values.length;
@@ -72,6 +102,12 @@ export function buildTasteProfile(
     for (const t of r.media.themes) bump(w > 0 ? tp.favourite_themes : tp.disliked_themes, t, Math.abs(w));
     for (const c of r.media.cast_members) bump(w > 0 ? tp.favourite_cast : tp.disliked_cast, c, Math.abs(w));
   }
+
+  [tp.favourite_genres, tp.disliked_genres] = reconcilePreferenceMaps(tp.favourite_genres, tp.disliked_genres);
+  [tp.favourite_themes, tp.disliked_themes] = reconcilePreferenceMaps(tp.favourite_themes, tp.disliked_themes, {
+    negativeDominance: 2.25,
+  });
+  [tp.favourite_cast, tp.disliked_cast] = reconcilePreferenceMaps(tp.favourite_cast, tp.disliked_cast);
 
   if (lovedLiked.length) {
     tp.preferred_complexity = avg(lovedLiked.map((r) => r.media!.complexity_level ?? 3));

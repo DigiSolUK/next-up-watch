@@ -25,7 +25,7 @@ function ProfilePage() {
   if (isLoading) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
 
   const ratedCount = (ratings ?? []).filter((r) => r.rating_value !== "not_seen").length;
-  const summary = profile?.profile_summary ?? (tp ? summariseProfile(tp, ratedCount) : "");
+  const summary = tp ? summariseProfile(tp, ratedCount) : (profile?.profile_summary ?? "");
   const breakdown = (() => {
     const acc = { loved: 0, liked: 0, ok: 0, hated: 0, not_seen: 0 };
     for (const r of ratings ?? []) (acc as Record<string, number>)[r.rating_value]++;
