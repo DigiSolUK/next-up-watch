@@ -31,7 +31,7 @@ export function Navbar() {
         </div>
       </header>
       {/* Bottom bar (mobile) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-4 border-t border-border bg-card/90 backdrop-blur md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-4 border-t border-border bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         <Link to="/swipe" className={linkClass}><Film className="h-5 w-5" /><span>Swipe</span></Link>
         <Link to="/watchlist" className={linkClass}><Bookmark className="h-5 w-5" /><span>List</span></Link>
         <Link to="/profile" className={linkClass}><User className="h-5 w-5" /><span>Taste</span></Link>
