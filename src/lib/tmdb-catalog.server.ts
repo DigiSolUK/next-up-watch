@@ -335,7 +335,7 @@ export async function importMoreTmdbCatalog(settings: UserSettings | null) {
     const row = mapDetailsToMediaRow(candidate.type, candidate.id, details);
     const { data: inserted, error } = await supabaseAdmin
       .from("media_titles")
-      .upsert(row, { onConflict: "external_source,external_id" })
+      .insert(row)
       .select("id")
       .single();
 
