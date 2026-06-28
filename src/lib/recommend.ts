@@ -160,6 +160,22 @@ export interface ScoredTitle {
   title: MediaTitle;
   score: number;
   reason: string;
+  reasonTags: string[];
+}
+
+function uniqueSignals(signals: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const signal of signals) {
+    const clean = signal.trim();
+    const key = clean.toLowerCase();
+    if (!clean || seen.has(key)) continue;
+    seen.add(key);
+    out.push(clean);
+  }
+
+  return out;
 }
 
 export function scoreCandidates(
@@ -186,7 +202,6 @@ export function scoreCandidates(
     })
     .map((m) => {
       let score = 0;
-      const reasons: string[] = [];
 
       // Genre match
       let genreHit = 0;
@@ -234,26 +249,26 @@ export function scoreCandidates(
       // External rating tiebreaker
       score += ((m.rating ?? 6) - 6) * 0.3;
 
-      // Build reason
+      // Build recommendation signals
       const lovedExamples = Object.entries(tp.favourite_themes).sort((a, b) => b[1] - a[1]).slice(0, 3).map((e) => e[0]);
+      const reasonSignals: string[] = [];
       if (themeHit >= 2 && matchedThemes.length) {
-        reasons.push(`it matches the themes you keep loving (${matchedThemes.slice(0, 2).join(", ").toLowerCase()})`);
+        reasonSignals.push(...matchedThemes.slice(0, 3));
       } else if (genreHit >= 1) {
         const topG = m.genres.find((g) => (tp.favourite_genres[g] ?? 0) > 1.5);
-        if (topG) reasons.push(`you seem to enjoy ${topG.toLowerCase()} stories like this`);
+        if (topG) reasonSignals.push(topG);
       }
-      if ((m.mystery_level ?? 0) >= 4 && tp.preferred_mystery >= 3.5) reasons.push("mystery-driven plotting");
-      if ((m.world_building_level ?? 0) >= 4 && tp.preferred_world_building >= 3.5) reasons.push("strong world-building");
-      if ((m.complexity_level ?? 0) >= 4 && tp.preferred_complexity >= 3.5) reasons.push("complex, layered storytelling");
-      if (settings.prefer_twisted_plots && (m.twisted_plot_level ?? 0) >= 4) reasons.push("the twisty plotting you asked for");
-      if (settings.prefer_complex_plots && (m.complexity_level ?? 0) >= 4) reasons.push("the denser storytelling you prefer");
-      if ((m.gore_level ?? 1) <= 2 && tp.gore_tolerance < 2.5) reasons.push("no reliance on gore");
-      if (!reasons.length && lovedExamples.length) reasons.push("it shares a tone with titles you've loved");
-      const reasonText = reasons.length
-        ? `Recommended because ${reasons.join(", and ")}.`
-        : "Suggested as a new direction for your taste.";
+      if ((m.mystery_level ?? 0) >= 4 && tp.preferred_mystery >= 3.5) reasonSignals.push("Mystery");
+      if ((m.world_building_level ?? 0) >= 4 && tp.preferred_world_building >= 3.5) reasonSignals.push("World-building");
+      if ((m.complexity_level ?? 0) >= 4 && tp.preferred_complexity >= 3.5) reasonSignals.push("Complex plot");
+      if (settings.prefer_twisted_plots && (m.twisted_plot_level ?? 0) >= 4) reasonSignals.push("Twisty plot");
+      if (settings.prefer_complex_plots && (m.complexity_level ?? 0) >= 4) reasonSignals.push("Dense story");
+      if ((m.gore_level ?? 1) <= 2 && tp.gore_tolerance < 2.5) reasonSignals.push("Low gore");
+      if (!reasonSignals.length && lovedExamples.length) reasonSignals.push(...lovedExamples);
+      const reasonTags = uniqueSignals(reasonSignals).slice(0, 3);
+      const reasonText = reasonTags.length ? "Recommended based on" : "Suggested as a new direction";
 
-      return { title: m, score, reason: reasonText };
+      return { title: m, score, reason: reasonText, reasonTags };
     })
     .sort((a, b) => b.score - a.score);
 }

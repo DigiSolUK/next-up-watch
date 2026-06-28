@@ -2,12 +2,13 @@ import { useState, useRef, type ReactNode } from "react";
 import type { MediaTitle, StreamingProvider } from "@/lib/types";
 import { ContentBadges } from "./ContentBadges";
 import { StreamingProviders } from "./StreamingProviders";
-import { Star, Film, Tv } from "lucide-react";
+import { Star, Film, Tv, Sparkles } from "lucide-react";
 
 interface Props {
   title: MediaTitle;
   providers?: StreamingProvider[];
   reason?: string;
+  reasonTags?: string[];
   disabled?: boolean;
   onSwipeLeft?: () => void;   // hated
   onSwipeRight?: () => void;  // loved
@@ -21,6 +22,7 @@ export function SwipeCard({
   title,
   providers,
   reason,
+  reasonTags,
   disabled = false,
   onSwipeLeft,
   onSwipeRight,
@@ -81,6 +83,8 @@ export function SwipeCard({
   const detailsClass = compactMobile
     ? "min-h-0 flex-1 space-y-1.5 overflow-hidden p-2.5 md:space-y-3 md:p-4"
     : "space-y-3 p-4";
+  const visibleReasonTags = (reasonTags ?? []).filter(Boolean).slice(0, 3);
+  const reasonHeading = visibleReasonTags.length > 0 ? (reason ?? "Recommended based on") : "Recommended";
 
   return (
     <div
@@ -137,7 +141,7 @@ export function SwipeCard({
           )}
         </div>
         <div className={detailsClass}>
-          <p className={compactMobile ? "line-clamp-1 text-xs leading-4 text-muted-foreground md:line-clamp-2 md:text-sm" : "line-clamp-2 text-sm text-muted-foreground"}>
+          <p className={compactMobile ? "line-clamp-3 text-xs leading-4 text-muted-foreground md:text-sm" : "line-clamp-3 text-sm text-muted-foreground"}>
             {title.description}
           </p>
           <div className="flex max-h-6 flex-wrap gap-1.5 overflow-hidden md:max-h-none">
@@ -157,10 +161,27 @@ export function SwipeCard({
               <StreamingProviders providers={providers} maxVisible={compactMobile ? 2 : 4} />
             </div>
           )}
-          {reason && (
-            <p className={compactMobile ? "line-clamp-1 rounded-lg border border-primary/30 bg-primary/10 p-1.5 text-[11px] italic text-primary-foreground/90 md:line-clamp-none md:p-2 md:text-xs" : "rounded-lg border border-primary/30 bg-primary/10 p-2 text-xs italic text-primary-foreground/90"}>
-              {reason}
-            </p>
+          {(reason || visibleReasonTags.length > 0) && (
+            <div className={compactMobile ? "rounded-xl border border-primary/25 bg-primary/10 p-1.5 md:p-3" : "rounded-xl border border-primary/25 bg-primary/10 p-3"}>
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-primary">
+                <Sparkles className="h-3 w-3" />
+                <span>{reasonHeading}</span>
+              </div>
+              {visibleReasonTags.length > 0 ? (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {visibleReasonTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center rounded-full border border-primary/25 bg-background/70 px-2 py-0.5 text-[11px] font-semibold text-foreground"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">{reason}</p>
+              )}
+            </div>
           )}
         </div>
       </div>

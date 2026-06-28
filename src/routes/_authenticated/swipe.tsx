@@ -81,7 +81,7 @@ function SwipePage() {
     );
   }, [ratings, titles, titleMap, settings]);
 
-  const queue: { title: MediaTitle; reason?: string }[] = useMemo(() => {
+  const queue: { title: MediaTitle; reason?: string; reasonTags?: string[] }[] = useMemo(() => {
     if (!titles) return [];
     if (watchlistGoalReached) return [];
 
@@ -113,7 +113,7 @@ function SwipePage() {
       new Set([...skippedIds, ...watchlistIdSet]),
       streamableIds,
     );
-    const personalized = scored.slice(0, 30).map((s) => ({ title: s.title, reason: s.reason }));
+    const personalized = scored.slice(0, 30).map((s) => ({ title: s.title, reason: s.reason, reasonTags: s.reasonTags }));
     const personalizedIds = new Set(personalized.map((item) => item.title.id));
     const fallback = stableTitleOrder(
       availableFallbackTitles.filter((title) => !personalizedIds.has(title.id)),
@@ -122,7 +122,8 @@ function SwipePage() {
       .slice(0, Math.max(0, 30 - personalized.length))
       .map((title) => ({
         title,
-        reason: "A broader pick so you can keep building your watchlist.",
+        reason: "Recommended based on",
+        reasonTags: ["More to consider"],
       }));
 
     return [...personalized, ...fallback];
@@ -298,6 +299,7 @@ function SwipePage() {
           title={current.title}
           providers={currentProviders}
           reason={current.reason}
+          reasonTags={current.reasonTags}
           disabled={busy}
           compactMobile
           onSwipeRight={() => onRate("loved")}

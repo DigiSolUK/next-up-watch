@@ -35,20 +35,20 @@ export function RatingButtons({ onRate, mode = "learning", onAddWatchlist, onNot
         </button>
       )}
       <div className={compact ? "grid grid-cols-5 gap-1 md:gap-2" : "grid grid-cols-5 gap-2"}>
-        <button disabled={disabled} aria-label="Rate as loved" onClick={() => onRate("loved")} className={`${buttonBase} bg-[color:var(--loved)]`}>
-          <Heart className={iconClass} /><span>Loved</span>
-        </button>
-        <button disabled={disabled} aria-label="Rate as liked" onClick={() => onRate("liked")} className={`${buttonBase} bg-[color:var(--liked)]`}>
-          <ThumbsUp className={iconClass} /><span>Liked</span>
+        <button disabled={disabled} aria-label="Rate as hated" onClick={() => onRate("hated")} className={`${buttonBase} bg-[color:var(--hated)]`}>
+          <ThumbsDown className={iconClass} /><span>Hated</span>
         </button>
         <button disabled={disabled} aria-label="Rate as okay" onClick={() => onRate("ok")} className={`${buttonBase} bg-[color:var(--ok)]`}>
           <Meh className={iconClass} /><span>OK</span>
         </button>
-        <button disabled={disabled} aria-label="Rate as hated" onClick={() => onRate("hated")} className={`${buttonBase} bg-[color:var(--hated)]`}>
-          <ThumbsDown className={iconClass} /><span>Hated</span>
-        </button>
         <button disabled={disabled} aria-label="Mark as not seen" onClick={() => onRate("not_seen")} className={`${buttonBase} bg-[color:var(--notseen)]`}>
           <EyeOff className={iconClass} /><span>Not seen</span>
+        </button>
+        <button disabled={disabled} aria-label="Rate as liked" onClick={() => onRate("liked")} className={`${buttonBase} bg-[color:var(--liked)]`}>
+          <ThumbsUp className={iconClass} /><span>Liked</span>
+        </button>
+        <button disabled={disabled} aria-label="Rate as loved" onClick={() => onRate("loved")} className={`${buttonBase} bg-[color:var(--loved)]`}>
+          <Heart className={iconClass} /><span>Loved</span>
         </button>
       </div>
       {mode === "recommendation" && (
