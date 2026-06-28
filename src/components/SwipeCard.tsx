@@ -14,9 +14,21 @@ interface Props {
   onSwipeUp?: () => void;     // liked
   onSwipeDown?: () => void;   // ok
   children?: ReactNode;       // action buttons row
+  compactMobile?: boolean;
 }
 
-export function SwipeCard({ title, providers, reason, disabled = false, onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown, children }: Props) {
+export function SwipeCard({
+  title,
+  providers,
+  reason,
+  disabled = false,
+  onSwipeLeft,
+  onSwipeRight,
+  onSwipeUp,
+  onSwipeDown,
+  children,
+  compactMobile = false,
+}: Props) {
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const [imgError, setImgError] = useState(false);
@@ -51,10 +63,28 @@ export function SwipeCard({ title, providers, reason, disabled = false, onSwipeL
   const rotate = drag.x * 0.06;
   const intent =
     drag.x > 60 ? "loved" : drag.x < -60 ? "hated" : drag.y < -60 ? "liked" : drag.y > 60 ? "ok" : null;
+  const rootClass = compactMobile
+    ? "relative mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col select-none touch-none md:block md:flex-none"
+    : "relative mx-auto w-full max-w-md select-none touch-none";
+  const shellClass = compactMobile
+    ? "flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl md:block md:rounded-3xl"
+    : "overflow-hidden rounded-3xl border border-border bg-card shadow-2xl";
+  const posterClass = compactMobile
+    ? "relative h-[clamp(10rem,32dvh,17rem)] w-full shrink-0 bg-muted md:aspect-[2/3] md:h-auto"
+    : "relative aspect-[2/3] w-full bg-muted";
+  const overlayClass = compactMobile
+    ? "absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-3 md:p-4"
+    : "absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-4";
+  const titleClass = compactMobile
+    ? "line-clamp-2 text-xl font-bold leading-tight text-white md:text-2xl"
+    : "text-2xl font-bold leading-tight text-white";
+  const detailsClass = compactMobile
+    ? "min-h-0 flex-1 space-y-1.5 overflow-hidden p-2.5 md:space-y-3 md:p-4"
+    : "space-y-3 p-4";
 
   return (
     <div
-      className="relative mx-auto w-full max-w-md select-none touch-none"
+      className={rootClass}
       style={{
         transform: `translate(${drag.x}px, ${drag.y}px) rotate(${rotate}deg)`,
         transition: drag.active ? "none" : "transform 250ms cubic-bezier(.2,.8,.2,1)",
@@ -64,8 +94,8 @@ export function SwipeCard({ title, providers, reason, disabled = false, onSwipeL
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-2xl">
-        <div className="relative aspect-[2/3] w-full bg-muted">
+      <div className={shellClass}>
+        <div className={posterClass}>
           {title.poster_url && !imgError ? (
             <img
               src={title.poster_url}
@@ -79,11 +109,11 @@ export function SwipeCard({ title, providers, reason, disabled = false, onSwipeL
               {title.title[0]}
             </div>
           )}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-4">
+          <div className={overlayClass}>
             <div className="mb-1 flex items-center gap-2 text-xs text-white/80">
               {title.type === "movie" ? <Film className="h-3 w-3" /> : <Tv className="h-3 w-3" />}
               <span>{title.type === "movie" ? "Movie" : "TV Series"}</span>
-              {title.release_year && <span>· {title.release_year}</span>}
+              {title.release_year && <span>- {title.release_year}</span>}
               {title.rating != null && (
                 <span className="ml-auto inline-flex items-center gap-0.5 rounded-md bg-black/40 px-1.5 py-0.5">
                   <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
@@ -91,7 +121,7 @@ export function SwipeCard({ title, providers, reason, disabled = false, onSwipeL
                 </span>
               )}
             </div>
-            <h2 className="text-2xl font-bold leading-tight text-white">{title.title}</h2>
+            <h2 className={titleClass}>{title.title}</h2>
           </div>
           {intent && (
             <div
@@ -106,29 +136,35 @@ export function SwipeCard({ title, providers, reason, disabled = false, onSwipeL
             </div>
           )}
         </div>
-        <div className="space-y-3 p-4">
-          <p className="line-clamp-2 text-sm text-muted-foreground">{title.description}</p>
-          <div className="flex flex-wrap gap-1.5">
+        <div className={detailsClass}>
+          <p className={compactMobile ? "line-clamp-1 text-xs leading-4 text-muted-foreground md:line-clamp-2 md:text-sm" : "line-clamp-2 text-sm text-muted-foreground"}>
+            {title.description}
+          </p>
+          <div className="flex max-h-6 flex-wrap gap-1.5 overflow-hidden md:max-h-none">
             {title.genres.slice(0, 3).map((g) => (
               <span key={g} className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">{g}</span>
             ))}
           </div>
-          <ContentBadges title={title} />
+          <div className="max-h-6 overflow-hidden md:max-h-none">
+            <ContentBadges title={title} />
+          </div>
           {title.cast_members.length > 0 && (
-            <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">Cast:</span> {title.cast_members.slice(0, 3).join(", ")}</p>
+            <p className="line-clamp-1 text-xs text-muted-foreground"><span className="font-semibold text-foreground">Cast:</span> {title.cast_members.slice(0, 3).join(", ")}</p>
           )}
           {providers && (
-            <div>
+            <div className="min-h-0 overflow-hidden">
               <p className="mb-1 text-xs font-semibold text-foreground">Where to watch</p>
-              <StreamingProviders providers={providers} />
+              <StreamingProviders providers={providers} maxVisible={compactMobile ? 2 : 4} />
             </div>
           )}
           {reason && (
-            <p className="rounded-lg border border-primary/30 bg-primary/10 p-2 text-xs italic text-primary-foreground/90">{reason}</p>
+            <p className={compactMobile ? "line-clamp-1 rounded-lg border border-primary/30 bg-primary/10 p-1.5 text-[11px] italic text-primary-foreground/90 md:line-clamp-none md:p-2 md:text-xs" : "rounded-lg border border-primary/30 bg-primary/10 p-2 text-xs italic text-primary-foreground/90"}>
+              {reason}
+            </p>
           )}
         </div>
       </div>
-      {children && <div className="mt-4">{children}</div>}
+      {children && <div className={compactMobile ? "mt-1.5 shrink-0 md:mt-4" : "mt-4"}>{children}</div>}
     </div>
   );
 }

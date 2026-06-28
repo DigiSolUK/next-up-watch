@@ -263,61 +263,43 @@ function SwipePage() {
     }
   };
 
-  return (
-    <div className="mx-auto max-w-md px-4 py-6">
-      <div className="mb-4 rounded-2xl border border-border bg-card/60 p-4">
-        <div className="flex items-center gap-2">
-          {ready ? <Sparkles className="h-4 w-4 text-primary" /> : <Target className="h-4 w-4 text-primary" />}
-          <span className="text-sm font-bold">{ready ? "Recommendation Mode" : "Learning Mode"}</span>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {ready
-            ? watchlistGoalReached
-              ? "Watch the titles on your list, then come back for more."
-              : `Pick ${Math.max(0, WATCHLIST_GOAL - activeWatchlistCount)} more for your watchlist. Keep rating - NextUp keeps learning.`
-            : `Training your taste profile: ${ratedCount} / ${threshold} rated`}
-        </p>
-        {ready ? (
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+  const modeProgress = ready
+    ? Math.min(100, (activeWatchlistCount / WATCHLIST_GOAL) * 100)
+    : threshold > 0
+      ? Math.min(100, (ratedCount / threshold) * 100)
+      : 0;
+  const modeLabel = ready ? "Recommendation Mode" : "Learning Mode";
+  const modeSummary = ready
+    ? watchlistGoalReached
+      ? "Watch the titles on your list, then come back for more."
+      : `Pick ${Math.max(0, WATCHLIST_GOAL - activeWatchlistCount)} more for your watchlist.`
+    : `${ratedCount} / ${threshold} rated`;
+
+  if (current) {
+    return (
+      <div className="mx-auto flex h-[calc(100dvh_-_3.5rem_-_env(safe-area-inset-bottom))] max-w-md flex-col overflow-hidden px-2 py-2 md:block md:h-auto md:overflow-visible md:px-4 md:py-6">
+        <div className="mb-1.5 flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card/60 px-3 py-2 md:mb-4 md:block md:rounded-2xl md:p-4">
+          <div className="flex min-w-0 items-center gap-2">
+            {ready ? <Sparkles className="h-4 w-4 shrink-0 text-primary" /> : <Target className="h-4 w-4 shrink-0 text-primary" />}
+            <span className="truncate text-xs font-bold md:text-sm">{modeLabel}</span>
+          </div>
+          <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground md:mt-1 md:whitespace-normal md:text-xs">
+            {modeSummary}
+          </p>
+          <div className="h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-muted md:mt-3 md:h-2 md:w-full">
             <div
               className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all"
-              style={{ width: `${Math.min(100, (activeWatchlistCount / WATCHLIST_GOAL) * 100)}%` }}
+              style={{ width: `${modeProgress}%` }}
             />
           </div>
-        ) : (
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all" style={{ width: `${Math.min(100, (ratedCount / threshold) * 100)}%` }} />
-          </div>
-        )}
-      </div>
+        </div>
 
-      {!current ? (
-        <QueueEmptyState
-          ready={ready}
-          ratedCount={ratedCount}
-          threshold={threshold}
-          totalTitles={titles?.length ?? 0}
-          freshCandidateCount={freshCandidateCount}
-          activeWatchlistCount={activeWatchlistCount}
-          watchlistGoal={WATCHLIST_GOAL}
-          goalReached={watchlistGoalReached}
-          importingCatalog={importMoreTitles.isPending}
-          catalogImportExhausted={catalogImportExhausted}
-          catalogImportError={catalogImportErrorMessage}
-          skippedCount={skippedIds.size}
-          activeFilterLabels={activeFilterLabels}
-          onImportMore={() => runCatalogImport(true)}
-          onRestoreSkipped={() => {
-            setSkippedIds(new Set());
-            toast.info("Skipped titles are back in the queue.");
-          }}
-        />
-      ) : (
         <SwipeCard
           title={current.title}
           providers={currentProviders}
           reason={current.reason}
           disabled={busy}
+          compactMobile
           onSwipeRight={() => onRate("loved")}
           onSwipeLeft={() => onRate("hated")}
           onSwipeUp={() => onRate("liked")}
@@ -330,9 +312,49 @@ function SwipePage() {
             onNotInterested={onNotInterested}
             onSkip={onSkip}
             disabled={busy}
+            compact
           />
         </SwipeCard>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-md px-4 py-6 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-6">
+      <div className="mb-4 rounded-2xl border border-border bg-card/60 p-4">
+        <div className="flex items-center gap-2">
+          {ready ? <Sparkles className="h-4 w-4 text-primary" /> : <Target className="h-4 w-4 text-primary" />}
+          <span className="text-sm font-bold">{modeLabel}</span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">{modeSummary}</p>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all"
+            style={{ width: `${modeProgress}%` }}
+          />
+        </div>
+      </div>
+
+      <QueueEmptyState
+        ready={ready}
+        ratedCount={ratedCount}
+        threshold={threshold}
+        totalTitles={titles?.length ?? 0}
+        freshCandidateCount={freshCandidateCount}
+        activeWatchlistCount={activeWatchlistCount}
+        watchlistGoal={WATCHLIST_GOAL}
+        goalReached={watchlistGoalReached}
+        importingCatalog={importMoreTitles.isPending}
+        catalogImportExhausted={catalogImportExhausted}
+        catalogImportError={catalogImportErrorMessage}
+        skippedCount={skippedIds.size}
+        activeFilterLabels={activeFilterLabels}
+        onImportMore={() => runCatalogImport(true)}
+        onRestoreSkipped={() => {
+          setSkippedIds(new Set());
+          toast.info("Skipped titles are back in the queue.");
+        }}
+      />
     </div>
   );
 }

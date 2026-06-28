@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useLocation,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -96,12 +97,15 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const location = useLocation();
+  const isSwipeRoute = location.pathname === "/swipe";
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <div className="flex min-h-screen flex-col [min-height:100dvh]">
           <Navbar />
-          <main className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
+          <main className={`flex-1 ${isSwipeRoute ? "pb-0" : "pb-[calc(5rem+env(safe-area-inset-bottom))]"} md:pb-0`}>
             <Outlet />
           </main>
         </div>
