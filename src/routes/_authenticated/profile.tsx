@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useUserProfile, useUserRatings, useMediaTitles, useUserSettings } from "@/hooks/use-nextup-data";
 import { buildTasteProfile, summariseProfile } from "@/lib/recommend";
 import { useMemo } from "react";
@@ -11,6 +11,12 @@ export const Route = createFileRoute("/_authenticated/profile")({
 });
 
 function ProfilePage() {
+  const location = useLocation();
+  if (location.pathname !== "/profile") return <Outlet />;
+  return <ProfileContent />;
+}
+
+function ProfileContent() {
   const { data: profile, isLoading } = useUserProfile();
   const { data: ratings } = useUserRatings();
   const { data: titles } = useMediaTitles();
@@ -60,11 +66,11 @@ function ProfilePage() {
       </div>
 
       <div className="mt-4 grid grid-cols-5 gap-2">
-        <Stat label="Loved" value={breakdown.loved} tone="var(--loved)" />
-        <Stat label="Liked" value={breakdown.liked} tone="var(--liked)" />
-        <Stat label="OK" value={breakdown.ok} tone="var(--ok)" />
-        <Stat label="Hated" value={breakdown.hated} tone="var(--hated)" />
-        <Stat label="Not seen" value={breakdown.not_seen} tone="var(--notseen)" />
+        <Stat label="Loved" value={breakdown.loved} tone="var(--loved)" rating="loved" />
+        <Stat label="Liked" value={breakdown.liked} tone="var(--liked)" rating="liked" />
+        <Stat label="OK" value={breakdown.ok} tone="var(--ok)" rating="ok" />
+        <Stat label="Hated" value={breakdown.hated} tone="var(--hated)" rating="hated" />
+        <Stat label="Not seen" value={breakdown.not_seen} tone="var(--notseen)" rating="not_seen" />
       </div>
 
       {tp && (
@@ -88,12 +94,17 @@ function ProfilePage() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
+function Stat({ label, value, tone, rating }: { label: string; value: number; tone: string; rating: string }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-2 text-center sm:p-3">
+    <Link
+      to="/profile/ratings/$rating"
+      params={{ rating }}
+      aria-label={`View ${label} titles`}
+      className="rounded-xl border border-border bg-card p-2 text-center transition-colors hover:bg-secondary/60 focus:outline-none focus:ring-2 focus:ring-ring sm:p-3"
+    >
       <div className="text-xl font-extrabold sm:text-2xl" style={{ color: `oklch(from ${tone} l c h)` }}>{value}</div>
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground sm:text-[11px]">{label}</div>
-    </div>
+    </Link>
   );
 }
 
