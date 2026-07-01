@@ -408,10 +408,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      ensure_user_bootstrap: {
-        Args: { target_user_id: string }
-        Returns: undefined
-      }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never
