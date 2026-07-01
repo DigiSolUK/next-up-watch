@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import type { UserSettings } from "@/lib/types";
+import type { TmdbTrailer, UserSettings } from "@/lib/types";
 import type { Database } from "@/integrations/supabase/types";
 
 type MediaType = "movie" | "tv";
@@ -68,6 +68,19 @@ interface TmdbWatchProviderResponse {
 
 interface TmdbProviderListResponse {
   results?: TmdbWatchProvider[];
+}
+
+interface TmdbVideo {
+  key?: string;
+  name?: string;
+  site?: string;
+  type?: string;
+  official?: boolean;
+  published_at?: string;
+}
+
+interface TmdbVideosResponse {
+  results?: TmdbVideo[];
 }
 
 function requireTmdbAuth() {
@@ -239,6 +252,52 @@ async function fetchWatchProviders(type: MediaType, id: number) {
   return tmdbFetch<TmdbWatchProviderResponse>(`/${type}/${id}/watch/providers`);
 }
 
+async function fetchVideos(type: MediaType, id: number, language?: string) {
+  return tmdbFetch<TmdbVideosResponse>(`/${type}/${id}/videos`, {
+    language,
+  });
+}
+
+function parseTmdbExternalId(externalId: string | null | undefined, fallbackType: string | null | undefined) {
+  if (!externalId) return null;
+
+  const typed = /^(movie|tv)-(\d+)$/.exec(externalId);
+  if (typed) {
+    return { type: typed[1] as MediaType, id: Number(typed[2]) };
+  }
+
+  const numericId = Number(externalId);
+  if ((fallbackType === "movie" || fallbackType === "tv") && Number.isInteger(numericId) && numericId > 0) {
+    return { type: fallbackType, id: numericId };
+  }
+
+  return null;
+}
+
+function isSafeYoutubeKey(key: string | undefined): key is string {
+  return Boolean(key && /^[a-zA-Z0-9_-]+$/.test(key));
+}
+
+function trailerScore(video: TmdbVideo) {
+  let score = 0;
+  if (video.type === "Trailer") score += 100;
+  if (video.type === "Teaser") score += 40;
+  if (video.official) score += 25;
+  if (/trailer/i.test(video.name ?? "")) score += 15;
+  if (/official/i.test(video.name ?? "")) score += 5;
+  return score;
+}
+
+function pickTrailer(videos: TmdbVideo[]) {
+  return videos
+    .filter((video) => video.site === "YouTube" && isSafeYoutubeKey(video.key))
+    .sort((a, b) => {
+      const scoreDelta = trailerScore(b) - trailerScore(a);
+      if (scoreDelta !== 0) return scoreDelta;
+      return Date.parse(b.published_at ?? "0") - Date.parse(a.published_at ?? "0");
+    })[0] ?? null;
+}
+
 function mapDetailsToMediaRow(type: MediaType, id: number, details: TmdbDetails): MediaInsert {
   const genres = (details.genres ?? []).map((genre) => genre.name);
   const taste = deriveTasteFields(genres);
@@ -355,4 +414,43 @@ export async function importMoreTmdbCatalog(settings: UserSettings | null) {
   }
 
   return { added, scanned };
+}
+
+export async function getTmdbTrailerForTitle(mediaTitleId: string): Promise<TmdbTrailer | null> {
+  const { data: title, error } = await supabaseAdmin
+    .from("media_titles")
+    .select("title,type,external_id,external_source")
+    .eq("id", mediaTitleId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!title) throw new Error("Title not found.");
+  if (title.external_source && title.external_source !== "tmdb") return null;
+
+  const tmdbRef = parseTmdbExternalId(title.external_id, title.type);
+  if (!tmdbRef) return null;
+
+  const primary = await fetchVideos(tmdbRef.type, tmdbRef.id, "en-GB");
+  const primaryVideos = primary.results ?? [];
+  let videos = primaryVideos;
+
+  if (!pickTrailer(primaryVideos)) {
+    const fallback = await fetchVideos(tmdbRef.type, tmdbRef.id);
+    const seen = new Set(primaryVideos.map((video) => video.key).filter(Boolean));
+    videos = [
+      ...primaryVideos,
+      ...(fallback.results ?? []).filter((video) => !video.key || !seen.has(video.key)),
+    ];
+  }
+
+  const trailer = pickTrailer(videos);
+  if (!trailer?.key) return null;
+
+  return {
+    key: trailer.key,
+    name: trailer.name ?? `${title.title} trailer`,
+    site: "YouTube",
+    embedUrl: `https://www.youtube-nocookie.com/embed/${trailer.key}?autoplay=1&rel=0`,
+    watchUrl: `https://www.youtube.com/watch?v=${trailer.key}`,
+  };
 }

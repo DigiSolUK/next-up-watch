@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, type ReactNode } from "react";
 import type { MediaTitle, StreamingProvider } from "@/lib/types";
 import { ContentBadges } from "./ContentBadges";
 import { StreamingProviders } from "./StreamingProviders";
-import { Star, Film, Tv, Sparkles } from "lucide-react";
+import { Star, Film, Tv, Sparkles, PlayCircle } from "lucide-react";
 
 interface Props {
   title: MediaTitle;
@@ -16,6 +16,7 @@ interface Props {
   onSwipeDown?: () => void;   // ok
   children?: ReactNode;       // action buttons row
   compactMobile?: boolean;
+  onTrailerClick?: () => void;
 }
 
 export function SwipeCard({
@@ -30,6 +31,7 @@ export function SwipeCard({
   onSwipeDown,
   children,
   compactMobile = false,
+  onTrailerClick,
 }: Props) {
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
   const startRef = useRef<{ x: number; y: number } | null>(null);
@@ -65,6 +67,14 @@ export function SwipeCard({
     startRef.current = null;
     setDrag({ x: 0, y: 0, active: false });
   };
+  const stopTrailerPointer = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+  };
+  const openTrailer = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onTrailerClick?.();
+  };
 
   const rotate = drag.x * 0.06;
   const intent =
@@ -76,7 +86,7 @@ export function SwipeCard({
     ? "flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl md:block md:rounded-3xl"
     : "overflow-hidden rounded-3xl border border-border bg-card shadow-2xl";
   const posterClass = compactMobile
-    ? "relative h-[clamp(10rem,32dvh,17rem)] w-full shrink-0 bg-muted md:aspect-[2/3] md:h-auto"
+    ? "relative h-[clamp(11.5rem,36dvh,19rem)] w-full shrink-0 bg-muted md:aspect-[2/3] md:h-auto"
     : "relative aspect-[2/3] w-full bg-muted";
   const overlayClass = compactMobile
     ? "absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-3 md:p-4"
@@ -85,7 +95,7 @@ export function SwipeCard({
     ? "line-clamp-2 text-xl font-bold leading-tight text-white md:text-2xl"
     : "text-2xl font-bold leading-tight text-white";
   const detailsClass = compactMobile
-    ? "min-h-0 flex-1 space-y-1.5 overflow-hidden p-2.5 md:space-y-3 md:p-4"
+    ? "min-h-0 flex-1 space-y-2 overflow-hidden p-3 md:space-y-3 md:p-4"
     : "space-y-3 p-4";
   const visibleReasonTags = (reasonTags ?? []).filter(Boolean).slice(0, 3);
   const reasonHeading = visibleReasonTags.length > 0 ? (reason ?? "Recommended based on") : "Recommended";
@@ -117,6 +127,19 @@ export function SwipeCard({
               {title.title[0]}
             </div>
           )}
+          {onTrailerClick && (
+            <button
+              type="button"
+              aria-label={`Play trailer for ${title.title}`}
+              onPointerDown={stopTrailerPointer}
+              onPointerMove={stopTrailerPointer}
+              onPointerUp={stopTrailerPointer}
+              onClick={openTrailer}
+              className="absolute left-3 top-3 z-10 inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white shadow-lg backdrop-blur transition-colors hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-white/80"
+            >
+              <PlayCircle className="h-5 w-5" />
+            </button>
+          )}
           <div className={overlayClass}>
             <div className="mb-1 flex items-center gap-2 text-xs text-white/80">
               {title.type === "movie" ? <Film className="h-3 w-3" /> : <Tv className="h-3 w-3" />}
@@ -133,7 +156,7 @@ export function SwipeCard({
           </div>
           {intent && (
             <div
-              className={`pointer-events-none absolute left-4 top-4 rounded-lg border-4 px-3 py-1 text-2xl font-black uppercase tracking-wider ${
+              className={`pointer-events-none absolute right-4 top-4 rounded-lg border-4 px-3 py-1 text-2xl font-black uppercase tracking-wider ${
                 intent === "loved" ? "border-[color:var(--loved)] text-[color:var(--loved)]" :
                 intent === "hated" ? "rotate-12 border-[color:var(--hated)] text-[color:var(--hated)]" :
                 intent === "liked" ? "border-[color:var(--liked)] text-[color:var(--liked)]" :
@@ -145,12 +168,12 @@ export function SwipeCard({
           )}
         </div>
         <div className={detailsClass}>
-          <p className={compactMobile ? "line-clamp-3 text-xs leading-4 text-muted-foreground md:text-sm" : "line-clamp-3 text-sm text-muted-foreground"}>
+          <p className={compactMobile ? "line-clamp-3 text-xs leading-[1.15rem] text-muted-foreground md:text-sm" : "line-clamp-3 text-sm text-muted-foreground"}>
             {title.description}
           </p>
-          <div className="flex max-h-6 flex-wrap gap-1.5 overflow-hidden md:max-h-none">
+          <div className="flex max-h-7 flex-wrap gap-1.5 overflow-hidden md:max-h-none">
             {title.genres.slice(0, 3).map((g) => (
-              <span key={g} className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">{g}</span>
+              <span key={g} className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-secondary-foreground">{g}</span>
             ))}
           </div>
           <div className="max-h-6 overflow-hidden md:max-h-none">
@@ -166,7 +189,7 @@ export function SwipeCard({
             </div>
           )}
           {(reason || visibleReasonTags.length > 0) && (
-            <div className={compactMobile ? "rounded-xl border border-primary/25 bg-primary/10 p-1.5 md:p-3" : "rounded-xl border border-primary/25 bg-primary/10 p-3"}>
+            <div className={compactMobile ? "rounded-xl border border-primary/25 bg-primary/10 p-2 md:p-3" : "rounded-xl border border-primary/25 bg-primary/10 p-3"}>
               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-primary">
                 <Sparkles className="h-3 w-3" />
                 <span>{reasonHeading}</span>

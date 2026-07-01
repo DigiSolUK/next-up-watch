@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMediaTitles, useUserRatings, useUserSettings, useRateTitle, useAddToWatchlist, useLogEvent, useUserProfile, useWatchlist, useStreamingForTitles, useImportMoreTmdbTitles } from "@/hooks/use-nextup-data";
+import { useMediaTitles, useUserRatings, useUserSettings, useRateTitle, useAddToWatchlist, useLogEvent, useUserProfile, useWatchlist, useStreamingForTitles, useImportMoreTmdbTitles, useTmdbTrailer } from "@/hooks/use-nextup-data";
 import { SwipeCard } from "@/components/SwipeCard";
 import { RatingButtons } from "@/components/RatingButtons";
+import { TrailerDialog } from "@/components/TrailerDialog";
 import { buildTasteProfile, scoreCandidates, stableTitleOrder } from "@/lib/recommend";
 import type { MediaTitle, RatingValue, TasteProfile, UserSettings, WatchStatus } from "@/lib/types";
 import { ArrowRight, Loader2, RefreshCcw, RotateCcw, Sparkles, SlidersHorizontal, Target } from "lucide-react";
@@ -30,6 +31,7 @@ function SwipePage() {
   const [catalogImportAttemptKey, setCatalogImportAttemptKey] = useState<string | null>(null);
   const [catalogImportResult, setCatalogImportResult] = useState<{ key: string; added: number; scanned: number } | null>(null);
   const [catalogImportError, setCatalogImportError] = useState<string | null>(null);
+  const [trailerOpen, setTrailerOpen] = useState(false);
 
   const rate = useRateTitle();
   const addWatch = useAddToWatchlist();
@@ -151,6 +153,7 @@ function SwipePage() {
     return queue.find((item) => item.title.id === activeTitleId) ?? queue[0];
   }, [activeTitleId, queue]);
   const currentProviders = current ? streamingByTitle.data?.[current.title.id] : undefined;
+  const trailer = useTmdbTrailer(current?.title.id, trailerOpen);
   const busy = rate.isPending || addWatch.isPending || logEvent.isPending;
   const streamingFilterLoading = Boolean(settings?.preferred_streaming_providers.length && streamingByTitle.isLoading);
   const catalogImportExhausted = catalogImportResult?.key === catalogImportKey && catalogImportResult.added === 0;
@@ -166,6 +169,10 @@ function SwipePage() {
       setActiveTitleId(queue[0].title.id);
     }
   }, [activeTitleId, queue]);
+
+  useEffect(() => {
+    setTrailerOpen(false);
+  }, [current?.title.id]);
 
   const runCatalogImport = useCallback((manual = false) => {
     if (importMoreTitles.isPending) return;
@@ -277,18 +284,6 @@ function SwipePage() {
     }
   };
 
-  const onNotInterested = async () => {
-    if (!current || busy) return;
-    const actedOn = advanceCurrent();
-    if (!actedOn) return;
-    try {
-      await logEvent.mutateAsync({ mediaTitleId: actedOn.title.id, eventType: "marked_not_interested" });
-    } catch (e) {
-      restoreCurrent(actedOn.title.id);
-      toast.error((e as Error).message);
-    }
-  };
-
   const onSkip = async () => {
     if (!current || busy) return;
     const actedOn = advanceCurrent();
@@ -344,17 +339,26 @@ function SwipePage() {
           onSwipeLeft={() => onRate("hated")}
           onSwipeUp={() => onRate("liked")}
           onSwipeDown={() => onRate("ok")}
+          onTrailerClick={() => setTrailerOpen(true)}
         >
           <RatingButtons
             onRate={onRate}
             mode={ready ? "recommendation" : "learning"}
             onAddWatchlist={onAddWatchlist}
-            onNotInterested={onNotInterested}
             onSkip={onSkip}
             disabled={busy}
             compact
           />
         </SwipeCard>
+        <TrailerDialog
+          open={trailerOpen}
+          onOpenChange={setTrailerOpen}
+          title={current.title}
+          trailer={trailer.data}
+          isLoading={trailer.isLoading}
+          isError={trailer.isError}
+          errorMessage={trailer.error?.message}
+        />
       </div>
     );
   }

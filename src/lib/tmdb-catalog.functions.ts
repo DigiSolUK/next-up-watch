@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { importMoreTmdbCatalog } from "@/lib/tmdb-catalog.server";
+import { getTmdbTrailerForTitle, importMoreTmdbCatalog } from "@/lib/tmdb-catalog.server";
 import type { UserSettings } from "@/lib/types";
 
 export const importMoreTmdbTitles = createServerFn({ method: "POST" })
@@ -16,3 +16,14 @@ export const importMoreTmdbTitles = createServerFn({ method: "POST" })
 
     return importMoreTmdbCatalog(data as unknown as UserSettings | null);
   });
+
+export const getTmdbTrailer = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { mediaTitleId: string }) => {
+    if (!data?.mediaTitleId || typeof data.mediaTitleId !== "string") {
+      throw new Error("Missing media title id.");
+    }
+
+    return { mediaTitleId: data.mediaTitleId };
+  })
+  .handler(async ({ data }) => getTmdbTrailerForTitle(data.mediaTitleId));

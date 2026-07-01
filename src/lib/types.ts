@@ -29,6 +29,16 @@ export interface MediaTitle {
   twisted_plot_level: number | null;
   violence_level: number | null;
   content_warnings: string[];
+  external_id?: string | null;
+  external_source?: string | null;
+}
+
+export interface TmdbTrailer {
+  key: string;
+  name: string;
+  site: "YouTube";
+  embedUrl: string;
+  watchUrl: string;
 }
 
 export interface UserRating {

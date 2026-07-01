@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { importMoreTmdbTitles } from "@/lib/tmdb-catalog.functions";
+import { getTmdbTrailer, importMoreTmdbTitles } from "@/lib/tmdb-catalog.functions";
 import { useAuth } from "./use-auth";
 import type { MediaTitle, RatingValue, StreamingProvider, UserRating, UserSettings, WatchStatus, WatchlistItem, TasteProfile } from "@/lib/types";
 import { buildTasteProfile, summariseProfile } from "@/lib/recommend";
@@ -40,6 +40,29 @@ export function useImportMoreTmdbTitles() {
       qc.invalidateQueries({ queryKey: ["media_titles"] });
       qc.invalidateQueries({ queryKey: ["streaming"] });
     },
+  });
+}
+
+export function useTmdbTrailer(mediaTitleId: string | undefined, enabled: boolean) {
+  const { session } = useAuth();
+
+  return useQuery({
+    queryKey: ["tmdb_trailer", mediaTitleId],
+    queryFn: async () => {
+      const token = session?.access_token;
+      if (!mediaTitleId) return null;
+      if (!token) throw new Error("Not signed in");
+
+      return getTmdbTrailer({
+        data: { mediaTitleId },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    },
+    enabled: Boolean(enabled && mediaTitleId && session?.access_token),
+    staleTime: 1000 * 60 * 60 * 12,
+    retry: 1,
   });
 }
 
