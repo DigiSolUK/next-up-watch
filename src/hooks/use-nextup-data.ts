@@ -6,9 +6,12 @@ import type { MediaTitle, RatingValue, StreamingProvider, UserRating, UserSettin
 import { buildTasteProfile, summariseProfile } from "@/lib/recommend";
 
 async function ensureUserBootstrap(userId: string) {
-  const { error } = await supabase.rpc("ensure_user_bootstrap", { target_user_id: userId });
-  if (error) throw error;
+  await Promise.all([
+    supabase.from("user_settings").upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true }),
+    supabase.from("user_profiles").upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true }),
+  ]);
 }
+
 
 export function useMediaTitles() {
   return useQuery({

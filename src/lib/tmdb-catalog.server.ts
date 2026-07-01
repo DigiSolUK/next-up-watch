@@ -268,7 +268,7 @@ function parseTmdbExternalId(externalId: string | null | undefined, fallbackType
 
   const numericId = Number(externalId);
   if ((fallbackType === "movie" || fallbackType === "tv") && Number.isInteger(numericId) && numericId > 0) {
-    return { type: fallbackType, id: numericId };
+    return { type: fallbackType as MediaType, id: numericId };
   }
 
   return null;

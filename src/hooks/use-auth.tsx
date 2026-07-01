@@ -22,15 +22,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const bootstrappedUserIds = useRef<Set<string>>(new Set());
 
   const ensureBootstrap = useCallback(async (nextSession: Session | null) => {
-    const userId = nextSession?.user.id;
-    if (!userId || bootstrappedUserIds.current.has(userId)) return;
-    bootstrappedUserIds.current.add(userId);
-    const { error } = await supabase.rpc("ensure_user_bootstrap", { target_user_id: userId });
-    if (error) {
-      bootstrappedUserIds.current.delete(userId);
-      console.error("[Supabase] Failed to ensure first-run user rows", error);
+    const user = nextSession?.user;
+    if (!user || bootstrappedUserIds.current.has(user.id)) return;
+    bootstrappedUserIds.current.add(user.id);
+    const results = await Promise.all([
+      supabase.from("profiles").upsert({ id: user.id, email: user.email ?? "" }, { onConflict: "id", ignoreDuplicates: true }),
+      supabase.from("user_settings").upsert({ user_id: user.id }, { onConflict: "user_id", ignoreDuplicates: true }),
+      supabase.from("user_profiles").upsert({ user_id: user.id }, { onConflict: "user_id", ignoreDuplicates: true }),
+    ]);
+    const failed = results.find((r) => r.error);
+    if (failed?.error) {
+      bootstrappedUserIds.current.delete(user.id);
+      console.error("[Supabase] Failed to ensure first-run user rows", failed.error);
     }
   }, []);
+
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
