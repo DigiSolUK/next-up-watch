@@ -1,4 +1,4 @@
-import { useState, useRef, type ReactNode } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import type { MediaTitle, StreamingProvider } from "@/lib/types";
 import { ContentBadges } from "./ContentBadges";
 import { StreamingProviders } from "./StreamingProviders";
@@ -34,6 +34,10 @@ export function SwipeCard({
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [title.id]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (disabled) return;

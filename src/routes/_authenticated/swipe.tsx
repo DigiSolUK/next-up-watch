@@ -26,6 +26,7 @@ function SwipePage() {
   const { data: profile } = useUserProfile();
   const { data: watchlist } = useWatchlist();
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
+  const [activeTitleId, setActiveTitleId] = useState<string | null>(null);
   const [catalogImportAttemptKey, setCatalogImportAttemptKey] = useState<string | null>(null);
   const [catalogImportResult, setCatalogImportResult] = useState<{ key: string; added: number; scanned: number } | null>(null);
   const [catalogImportError, setCatalogImportError] = useState<string | null>(null);
@@ -144,12 +145,27 @@ function SwipePage() {
     activeWatchlistCount,
   ]);
 
-  const current = queue[0];
+  const current = useMemo(() => {
+    if (!queue.length) return undefined;
+    if (!activeTitleId) return queue[0];
+    return queue.find((item) => item.title.id === activeTitleId) ?? queue[0];
+  }, [activeTitleId, queue]);
   const currentProviders = current ? streamingByTitle.data?.[current.title.id] : undefined;
   const busy = rate.isPending || addWatch.isPending || logEvent.isPending;
   const streamingFilterLoading = Boolean(settings?.preferred_streaming_providers.length && streamingByTitle.isLoading);
   const catalogImportExhausted = catalogImportResult?.key === catalogImportKey && catalogImportResult.added === 0;
   const catalogImportErrorMessage = catalogImportAttemptKey === catalogImportKey ? catalogImportError : null;
+
+  useEffect(() => {
+    if (!queue.length) {
+      if (activeTitleId) setActiveTitleId(null);
+      return;
+    }
+
+    if (!activeTitleId || !queue.some((item) => item.title.id === activeTitleId)) {
+      setActiveTitleId(queue[0].title.id);
+    }
+  }, [activeTitleId, queue]);
 
   const runCatalogImport = useCallback((manual = false) => {
     if (importMoreTitles.isPending) return;
@@ -208,29 +224,46 @@ function SwipePage() {
   }
 
   const advanceCurrent = () => {
-    if (!current) return;
-    setSkippedIds((s) => new Set(s).add(current.title.id));
+    if (!current) return null;
+    const actedOn = current;
+    const next = queue.find((item) => item.title.id !== actedOn.title.id);
+    setSkippedIds((s) => new Set(s).add(actedOn.title.id));
+    setActiveTitleId(next?.title.id ?? null);
+    return actedOn;
+  };
+
+  const restoreCurrent = (titleId: string) => {
+    setSkippedIds((s) => {
+      const restored = new Set(s);
+      restored.delete(titleId);
+      return restored;
+    });
+    setActiveTitleId(titleId);
   };
 
   const onRate = async (rating: RatingValue) => {
     if (!current || busy) return;
+    const actedOn = advanceCurrent();
+    if (!actedOn) return;
     try {
-      await rate.mutateAsync({ mediaTitleId: current.title.id, rating, mode: ready ? "recommendation" : "learning" });
-      advanceCurrent();
+      await rate.mutateAsync({ mediaTitleId: actedOn.title.id, rating, mode: ready ? "recommendation" : "learning" });
       if (rating === "loved") toast.success("Noted - we'll find more like this.");
       else if (rating === "hated") toast.message("Got it. Steering away from similar titles.");
     } catch (e) {
+      restoreCurrent(actedOn.title.id);
       toast.error((e as Error).message);
     }
   };
 
   const onAddWatchlist = async () => {
     if (!current || busy) return;
+    const actedOn = advanceCurrent();
+    if (!actedOn) return;
     try {
-      if (watchlistIdSet.has(current.title.id)) {
+      if (watchlistIdSet.has(actedOn.title.id)) {
         toast.info("Already in your watchlist.");
       } else {
-        await addWatch.mutateAsync(current.title.id);
+        await addWatch.mutateAsync(actedOn.title.id);
         const nextCount = Math.min(WATCHLIST_GOAL, activeWatchlistCount + 1);
         toast.success(
           nextCount >= WATCHLIST_GOAL
@@ -238,28 +271,32 @@ function SwipePage() {
             : `Added to watchlist (${nextCount}/${WATCHLIST_GOAL}).`,
         );
       }
-      advanceCurrent();
     } catch (e) {
+      restoreCurrent(actedOn.title.id);
       toast.error((e as Error).message);
     }
   };
 
   const onNotInterested = async () => {
     if (!current || busy) return;
+    const actedOn = advanceCurrent();
+    if (!actedOn) return;
     try {
-      await logEvent.mutateAsync({ mediaTitleId: current.title.id, eventType: "marked_not_interested" });
-      advanceCurrent();
+      await logEvent.mutateAsync({ mediaTitleId: actedOn.title.id, eventType: "marked_not_interested" });
     } catch (e) {
+      restoreCurrent(actedOn.title.id);
       toast.error((e as Error).message);
     }
   };
 
   const onSkip = async () => {
     if (!current || busy) return;
+    const actedOn = advanceCurrent();
+    if (!actedOn) return;
     try {
-      await logEvent.mutateAsync({ mediaTitleId: current.title.id, eventType: "skipped" });
-      advanceCurrent();
+      await logEvent.mutateAsync({ mediaTitleId: actedOn.title.id, eventType: "skipped" });
     } catch (e) {
+      restoreCurrent(actedOn.title.id);
       toast.error((e as Error).message);
     }
   };
@@ -296,6 +333,7 @@ function SwipePage() {
         </div>
 
         <SwipeCard
+          key={current.title.id}
           title={current.title}
           providers={currentProviders}
           reason={current.reason}
