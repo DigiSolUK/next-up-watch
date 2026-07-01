@@ -95,7 +95,7 @@ function RatingCategoryPage() {
       await rate.mutateAsync({
         mediaTitleId: selected.id,
         rating: nextRating,
-        mode: "profile_adjustment",
+        mode: "retaste",
       });
       toast.success(`Moved to ${RATING_CONFIG[nextRating].label}.`);
       setSelected(null);

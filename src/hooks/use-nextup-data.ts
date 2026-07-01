@@ -186,7 +186,7 @@ export function useRateTitle() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ mediaTitleId, rating, mode }: { mediaTitleId: string; rating: RatingValue; mode: "learning" | "recommendation" | "watchlist_followup" | "profile_adjustment" }) => {
+    mutationFn: async ({ mediaTitleId, rating, mode }: { mediaTitleId: string; rating: RatingValue; mode: "learning" | "recommendation" | "watchlist_followup" | "retaste" }) => {
       if (!user) throw new Error("Not signed in");
       const { error } = await supabase.from("user_ratings").upsert({
         user_id: user.id,
