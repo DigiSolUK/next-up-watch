@@ -86,7 +86,7 @@ export function SwipeCard({
     ? "flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl md:block md:rounded-3xl"
     : "overflow-hidden rounded-3xl border border-border bg-card shadow-2xl";
   const posterClass = compactMobile
-    ? "relative h-[clamp(11.5rem,36dvh,19rem)] w-full shrink-0 bg-muted md:aspect-[2/3] md:h-auto"
+    ? "relative h-[clamp(13rem,41dvh,21.5rem)] w-full shrink-0 bg-muted md:aspect-[2/3] md:h-auto"
     : "relative aspect-[2/3] w-full bg-muted";
   const overlayClass = compactMobile
     ? "absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-3 md:p-4"
